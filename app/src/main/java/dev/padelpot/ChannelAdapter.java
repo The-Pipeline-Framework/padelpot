@@ -54,15 +54,18 @@ public class ChannelAdapter {
       Review review = Review.class.cast(pending.get().requestPayload());
       if (!review.state().ownerId().equals(msg.ownerId()))
         throw new ForbiddenException("This interaction belongs to another owner");
-      if (msg.choice() == null)
-        throw new BadRequestException("An explicit owner choice is required");
       AnsweredReview reply;
       try {
         reply =
-            new OwnerProjector()
-                .project(review, new HumanAnswer(msg.choice(), msg.text()), msg.ownerId());
+            msg.choice() == null
+                ? new OwnerProjector().fromText(review, msg.text(), msg.ownerId())
+                : new OwnerProjector()
+                    .project(review, new HumanAnswer(msg.choice(), msg.text()), msg.ownerId());
       } catch (IllegalArgumentException e) {
-        throw new BadRequestException(e.getMessage());
+        throw new BadRequestException(
+            jakarta.ws.rs.core.Response.status(400)
+                .entity(Map.of("message", e.getMessage()))
+                .build());
       }
       var result =
           pipeline
@@ -85,7 +88,9 @@ public class ChannelAdapter {
           store.message(
               msg.ownerId(),
               "owner",
-              msg.choice() + (msg.text().isBlank() ? "" : ": " + msg.text()));
+              msg.choice() == null
+                  ? msg.text()
+                  : msg.choice() + (msg.text().isBlank() ? "" : ": " + msg.text()));
         }
       }
       return result;

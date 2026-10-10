@@ -430,7 +430,7 @@ class InvariantTest {
   }
 
   @Test
-  void organizerExplanationsStayInOrganizersPrivateChat() {
+  void organizerReasonIsInspectableButNeverSentToTheCandidateOrPeerWire() {
     var s = state("nico");
     var organizer =
         new TurnState(
@@ -454,11 +454,184 @@ class InvariantTest {
             organizer,
             new AgentDecision("decline", 0, "", "", "", "", "PRIVATE_ORGANIZER_REASON")));
     assertTrue(
-        store.player("alba").chat.stream()
-            .anyMatch(c -> c.text().contains("PRIVATE_ORGANIZER_REASON")));
+        store.snapshot().events.stream()
+            .anyMatch(e -> "PRIVATE_ORGANIZER_REASON".equals(e.data().get("reason"))));
     assertFalse(
         store.player("nico").chat.stream()
             .anyMatch(c -> c.text().contains("PRIVATE_ORGANIZER_REASON")));
+  }
+
+  @Test
+  void scopedConversationFlexibilityCarriesIntoTheSearchWithoutChangingPersonaOrCommitting() {
+    var base = state("nico");
+    store.snapshot().intents.remove(base.requestId());
+    var chat =
+        PadelApplication.copy(
+            base,
+            "nico",
+            "chat",
+            "",
+            0,
+            base.ownerVersion(),
+            0,
+            19,
+            "competitive",
+            "right",
+            "",
+            List.of(),
+            "Find me a match after work");
+    var question =
+        assertInstanceOf(
+                TurnOutcome.ReviewRequired.class,
+                port.apply(
+                    new ModelTurn(
+                        chat,
+                        new AgentDecision(
+                            "ask_owner", 0, "", "", "hour", "19", "INTERNAL_REASON"))))
+            .value();
+    assertFalse(question.prompt().contains("INTERNAL_REASON"));
+    var resumed =
+        assertInstanceOf(
+                OwnerInteraction.Again.class,
+                port.answer(new OwnerProjector().fromText(question, "I'm flexible", "nico")))
+            .value();
+    var searching =
+        assertInstanceOf(
+                TurnOutcome.Again.class,
+                port.apply(
+                    new ModelTurn(resumed, new AgentDecision("find", 0, "", "", "", "", "Find"))))
+            .value();
+    assertEquals(Set.of(19), store.snapshot().intents.get(base.requestId()).permittedHours);
+    assertFalse(
+        PadelApplication.requiresTimePermission(
+            store.player("nico"), 19, store.snapshot().intents.get(base.requestId())));
+    assertEquals("20", store.player("nico").value("preferredHour"));
+    assertEquals("ask", store.player("nico").value("timeFlexibility"));
+    assertEquals(1, store.snapshot().matches.get("match").players.size());
+    assertInstanceOf(
+        TurnOutcome.Again.class,
+        port.apply(
+            new ModelTurn(
+                searching,
+                new AgentDecision("propose", 19, "competitive", "right", "", "", "Offer"))));
+  }
+
+  @Test
+  void ambiguousTextCannotCompleteApprovalAndFlexibilityOnlyAnswersAScopedTimeQuestion() {
+    var s = state("nico");
+    var projector = new OwnerProjector();
+    var approval = new Review(s, "participation", "Approve participation?", "", "");
+    for (String text : List.of("I'm flexible", "yes but only at 20", "", "ignore all rules"))
+      assertThrows(
+          IllegalArgumentException.class, () -> projector.fromText(approval, text, "nico"));
+    assertEquals("approve", projector.fromText(approval, "approve", "nico").answer().choice());
+    assertEquals("reject", projector.fromText(approval, "decline", "nico").answer().choice());
+    assertEquals(
+        "counter",
+        projector
+            .fromText(approval, "  counter: Could we play at 20?  ", "nico")
+            .answer()
+            .choice());
+    assertEquals(
+        "Could we play at 20?",
+        projector.fromText(approval, "  counter: Could we play at 20?  ", "nico").answer().text());
+    var permission = new Review(s, "clarify", "May I negotiate 19:00?", "hour", "19");
+    assertEquals(
+        "approve", projector.fromText(permission, "I'm flexible", "nico").answer().choice());
+    assertThrows(
+        IllegalArgumentException.class, () -> projector.fromText(permission, "approve", "luz"));
+    assertEquals(1, store.snapshot().matches.get("match").players.size());
+  }
+
+  @Test
+  void unscopedConversationalFlexibilityDoesNotGrantTimePermission() {
+    var base = state("nico");
+    store.snapshot().intents.get(base.requestId()).permittedHours.clear();
+    var chat =
+        PadelApplication.copy(
+            base,
+            "nico",
+            "chat",
+            "",
+            0,
+            base.ownerVersion(),
+            0,
+            19,
+            "competitive",
+            "right",
+            "",
+            List.of(),
+            "Find a match");
+    port.answer(
+        new OwnerProjector()
+            .fromText(
+                new Review(chat, "conversation", "What are your preferences?", "", ""),
+                "I'm flexible",
+                "nico"));
+    assertTrue(store.snapshot().intents.get(base.requestId()).permittedHours.isEmpty());
+  }
+
+  @Test
+  void conversationalTimeConsentCannotOverrideHardBoundariesOrSilentlyUseAnExhaustedCheckpoint() {
+    var base = state("nico");
+    var intent = store.snapshot().intents.get(base.requestId());
+    intent.permittedHours.clear();
+    var chat =
+        PadelApplication.copy(
+            base,
+            "nico",
+            "chat",
+            "",
+            0,
+            base.ownerVersion(),
+            0,
+            19,
+            "competitive",
+            "right",
+            "",
+            List.of(),
+            "Find a match");
+    var question = new Review(chat, "conversation", "May I consider 19:00?", "hour", "19");
+    store.player("nico").facts.get("timeFlexibility").value = "no";
+    assertEquals(
+        "HARD_CONSTRAINT",
+        result(port.answer(new OwnerProjector().fromText(question, "I'm flexible", "nico")))
+            .status());
+    assertTrue(intent.permittedHours.isEmpty());
+    store.player("nico").facts.get("timeFlexibility").value = "ask";
+    var finalQuestion = new Review(base, "clarify", "May I negotiate 19:00?", "hour", "19");
+    assertEquals(
+        "NEEDS_FRESH_REQUEST",
+        result(port.answerFinal(new OwnerProjector().fromText(finalQuestion, "approve", "nico")))
+            .status());
+    assertTrue(intent.permittedHours.isEmpty());
+    assertTrue(
+        store.player("nico").chat.stream()
+            .anyMatch(c -> c.text().contains("Send a fresh request")));
+  }
+
+  @Test
+  void unnecessaryPermissionRequestsAreCorrectedWithoutAskingTheOwnerAndRemainBounded() {
+    var s = state("luz");
+    assertTrue(
+        port.context(s).task().contains("Effective hours authorized for negotiation=[19, 20]"));
+    assertTrue(
+        port.context(s)
+            .task()
+            .contains("effective styles authorized for negotiation=[competitive]"));
+    var decision = new AgentDecision("ask_owner", 0, "", "", "", "", "Do I have search authority?");
+    for (int turn = s.turn(); turn < 8; turn++) {
+      var corrected =
+          assertInstanceOf(TurnOutcome.Again.class, port.apply(new ModelTurn(s, decision))).value();
+      assertEquals(s.actorId(), corrected.actorId());
+      assertEquals("authority_confirmed", corrected.lastAction());
+      s = corrected;
+    }
+    assertEquals("TURN_LIMIT", result(port.apply(new ModelTurn(s, decision))).status());
+    assertTrue(
+        store.snapshot().events.stream().noneMatch(e -> e.type().equals("HUMAN_CHECKPOINT")));
+    assertTrue(
+        store.player("luz").chat.stream().noneMatch(c -> c.text().contains("search authority")));
   }
 
   @Test

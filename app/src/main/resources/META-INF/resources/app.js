@@ -182,6 +182,10 @@ function renderDecision() {
   const container = $("decision");
   container.replaceChildren();
   container.hidden = !p;
+  $("message").placeholder =
+    !p || p.kind === "conversation"
+      ? "Tell your agent what you have in mind…"
+      : "Reply approve, decline, or counter: your suggestion…";
   if (!p) return;
   if (p.kind === "conversation") {
     container.append(
@@ -242,6 +246,7 @@ function renderDecision() {
 function renderSuggestions() {
   const el = $("suggestions");
   el.replaceChildren();
+  if (detail.pending.length) return;
   const chips =
     selected === "alba"
       ? [
@@ -277,8 +282,8 @@ function renderSuggestions() {
 async function send(text) {
   if (busy) return;
   const question = detail?.pending[0];
-  if (question?.kind === "conversation") {
-    if (await reply(question, "clarify", text)) {
+  if (question) {
+    if (await reply(question, null, text)) {
       $("message").value = "";
       fitComposer();
     }
@@ -352,7 +357,7 @@ async function watchExecution(id, owner) {
         if (selected === owner)
           error(
             Error(
-              "Inference or execution failed. Open Agent activity for details. No new commitment was authorized.",
+              "Inference or execution failed. Open Agent activity for details.",
             ),
           );
         return;

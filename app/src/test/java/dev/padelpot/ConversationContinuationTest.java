@@ -20,6 +20,17 @@ class ConversationContinuationTest {
 
   @Test
   void locationAnswerResumesTheSearchAndStillRequiresParticipationApproval() throws Exception {
+    searchThroughQuestion("luz", "anywhere in Barcelona is fine by me", "", "");
+  }
+
+  @Test
+  void scopedFlexibilityAnswerReachesParticipationApprovalWithoutASecondTimeQuestion()
+      throws Exception {
+    searchThroughQuestion("nico", "I'm flexible", "hour", "19");
+  }
+
+  private void searchThroughQuestion(String owner, String answer, String field, String value)
+      throws Exception {
     session.reset(false);
     var match = new DemoSession.Match();
     match.id = "conversation-match";
@@ -30,11 +41,10 @@ class ConversationContinuationTest {
     match.area = "Barcelona";
     match.date = "Synthetic Thursday";
     match.players.put("alba", "left");
-    match.players.put("nico", "right");
+    match.players.put(owner.equals("luz") ? "nico" : "luz", owner.equals("luz") ? "right" : "left");
     match.players.put("teo", "right");
     session.snapshot().matches.put(match.id, match);
     String request = "Find me a competitive match this Thursday after work.";
-    String answer = "anywhere in Barcelona is fine by me";
     var first = new AtomicBoolean(true);
     var resumedWithContext = new AtomicBoolean(false);
     doAnswer(
@@ -46,7 +56,13 @@ class ConversationContinuationTest {
                       new ModelTurn(
                           turn.state(),
                           new AgentDecision(
-                              "message", 0, "", "", "", "", "Which broad area works for you?")));
+                              "ask_owner",
+                              0,
+                              "",
+                              "",
+                              field,
+                              value,
+                              "Which broad area works for you?")));
                 resumedWithContext.set(
                     turn.state().ownerText().contains(request)
                         && turn.state().ownerText().contains(answer)
@@ -61,35 +77,33 @@ class ConversationContinuationTest {
             .contentType("application/json")
             .body(
                 Map.of(
-                    "ownerId", "luz", "messageId", UUID.randomUUID().toString(), "text", request))
+                    "ownerId", owner, "messageId", UUID.randomUUID().toString(), "text", request))
             .post("/api/messages")
             .then()
             .statusCode(200)
             .extract()
             .path("executionId");
-    var question = TopologyTest.awaitPending("luz");
+    var question = TopologyTest.awaitPending(owner);
     assertEquals("conversation", question.get("kind"));
     given()
         .contentType("application/json")
         .body(
             Map.of(
                 "ownerId",
-                "luz",
+                owner,
                 "messageId",
                 UUID.randomUUID().toString(),
                 "text",
                 answer,
                 "interactionId",
-                question.get("id"),
-                "choice",
-                "clarify"))
+                question.get("id")))
         .post("/api/messages")
         .then()
         .statusCode(200);
     Map<String, Object> approval = null;
     for (int i = 0; i < 200; i++) {
       List<Map<String, Object>> pending =
-          given().get("/api/owners/luz").then().statusCode(200).extract().path("pending");
+          given().get("/api/owners/" + owner).then().statusCode(200).extract().path("pending");
       if (!pending.isEmpty() && pending.getFirst().get("kind").equals("participation")) {
         approval = pending.getFirst();
         break;
@@ -105,7 +119,7 @@ class ConversationContinuationTest {
         .body(
             Map.of(
                 "ownerId",
-                "luz",
+                owner,
                 "messageId",
                 UUID.randomUUID().toString(),
                 "text",

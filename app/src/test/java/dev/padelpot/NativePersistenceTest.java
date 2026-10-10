@@ -119,10 +119,26 @@ class NativePersistenceTest {
                   UUID.randomUUID().toString(),
                   "interactionId",
                   pending.get("id"),
-                  "choice",
-                  "approve",
                   "text",
-                  ""))
+                  "yes but only at 20:00"))
+          .post("/api/messages")
+          .then()
+          .statusCode(400)
+          .body("message", org.hamcrest.Matchers.containsString("pending question remains open"));
+      assertEquals(pending.get("id"), TopologyTest.awaitPending("nico").get("id"));
+      assertEquals(1, match.players.size(), "An ambiguous answer cannot reserve a place");
+      given()
+          .contentType("application/json")
+          .body(
+              Map.of(
+                  "ownerId",
+                  "nico",
+                  "messageId",
+                  UUID.randomUUID().toString(),
+                  "interactionId",
+                  pending.get("id"),
+                  "text",
+                  kind.equals("clarify") ? "I'm flexible" : "approve"))
           .post("/api/messages")
           .then()
           .statusCode(200);
