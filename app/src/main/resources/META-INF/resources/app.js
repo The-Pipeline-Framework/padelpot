@@ -5,6 +5,8 @@ let selected = "alba",
   developer = null,
   drawerMode = null,
   busy = false,
+  submittingOwner = null,
+  selectedMatchId = null,
   pollBusy = false,
   lastChat = "",
   lastDecision = "",
@@ -52,6 +54,8 @@ function ownerName(id) {
 function switchOwner(id) {
   selected = id;
   detail = null;
+  $("working")?.remove();
+  $("request-failure")?.remove();
   lastChat = "";
   closeDrawer();
   clearError();
@@ -115,9 +119,52 @@ function renderChat() {
     }
     list.scrollTop = list.scrollHeight;
   }
+  renderWorking();
   renderDecision();
   renderSuggestions();
   if (drawerMode === "persona") renderPersona();
+}
+function renderWorking() {
+  const status = detail?.latestRequest?.status;
+  const working =
+    submittingOwner === selected ||
+    ["RUNNING", "QUEUED", "PENDING", "WAIT_RETRY"].includes(status);
+  $("agent-status").textContent = working
+    ? "Your agent is working…"
+    : detail.pending.length
+      ? "Waiting for your decision"
+      : ["FAILED", "DLQ"].includes(status)
+        ? "Your latest request failed"
+        : "Your private padel agent";
+  if (working && !$("working")) {
+    const bubble = node("div", undefined, "bubble typing-bubble");
+    bubble.id = "working";
+    bubble.setAttribute("role", "status");
+    bubble.setAttribute("aria-label", "Your agent is working");
+    const dots = node("div", undefined, "typing-dots");
+    dots.setAttribute("aria-hidden", "true");
+    for (let i = 0; i < 3; i++) dots.append(node("span"));
+    bubble.append(node("span", "PADELPOT AGENT", "agent-label"), dots);
+    $("messages").append(bubble);
+    $("messages").scrollTop = $("messages").scrollHeight;
+  } else if (!working) $("working")?.remove();
+  if (["FAILED", "DLQ"].includes(status) && !working) {
+    if (!$("request-failure")) {
+      const failure = node(
+        "div",
+        "Your latest request failed. Open Agent activity to see what happened.",
+        "bubble request-failure",
+      );
+      failure.id = "request-failure";
+      failure.setAttribute("role", "status");
+      $("messages").append(failure);
+    }
+  } else $("request-failure")?.remove();
+}
+function fitComposer() {
+  const input = $("message");
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 200) + "px";
 }
 function renderDecision() {
   const p = detail.pending[0];
@@ -222,6 +269,7 @@ function renderSuggestions() {
     el.append(
       button(label, () => {
         $("message").value = text;
+        fitComposer();
         $("message").focus();
       }),
     );
@@ -230,10 +278,15 @@ async function send(text) {
   if (busy) return;
   const question = detail?.pending[0];
   if (question?.kind === "conversation") {
-    if (await reply(question, "clarify", text)) $("message").value = "";
+    if (await reply(question, "clarify", text)) {
+      $("message").value = "";
+      fitComposer();
+    }
     return;
   }
   busy = true;
+  submittingOwner = selected;
+  renderWorking();
   $("send").disabled = true;
   clearError();
   try {
@@ -243,6 +296,7 @@ async function send(text) {
       text,
     });
     $("message").value = "";
+    fitComposer();
     $("agent-status").textContent = "Your agent is thinking…";
     await refresh();
     watchExecution(accepted.executionId, selected);
@@ -250,12 +304,16 @@ async function send(text) {
     error(e);
   } finally {
     busy = false;
+    submittingOwner = null;
+    if (detail) renderWorking();
     $("send").disabled = false;
   }
 }
 async function reply(p, choice, text) {
   if (busy) return;
   busy = true;
+  submittingOwner = selected;
+  renderWorking();
   clearError();
   renderDecision();
   try {
@@ -275,6 +333,8 @@ async function reply(p, choice, text) {
     return false;
   } finally {
     busy = false;
+    submittingOwner = null;
+    if (detail) renderWorking();
     renderDecision();
   }
 }
@@ -310,14 +370,35 @@ async function watchExecution(id, owner) {
     }
   }
 }
+function matchLabel(id) {
+  return "#" + id.split(":").at(-1).slice(0, 8);
+}
 function renderMatch(matches) {
   const el = $("match");
   el.replaceChildren();
-  const m = matches.at(-1);
+  const m = matches.find((m) => m.id === selectedMatchId) || matches.at(-1);
+  if (matches.length > 1) {
+    const selector = node("select", undefined, "match-selector");
+    selector.setAttribute("aria-label", "Match to view");
+    for (const match of matches) {
+      const option = node(
+        "option",
+        `${matchLabel(match.id)} · ${match.hour}:00 · ${Object.keys(match.players).length} of 4 · ${match.status.toLowerCase()}`,
+      );
+      option.value = match.id;
+      option.selected = match.id === m.id;
+      selector.append(option);
+    }
+    selector.addEventListener("change", () => {
+      selectedMatchId = selector.value;
+      renderMatch(matches);
+    });
+    el.append(selector);
+  }
   const card = node("div", undefined, "match-card");
   const label = node("div", undefined, "eyebrow");
   label.append(
-    node("span", "THE NEXT MATCH"),
+    node("span", m ? "MATCH " + matchLabel(m.id) : "THE NEXT MATCH"),
     node("span", m?.status === "CONFIRMED" ? "✓" : "↗"),
   );
   card.append(label);
@@ -356,7 +437,7 @@ function renderMatch(matches) {
           ? "Match simulated · feedback time"
           : m.cancelled
             ? "Cancelled"
-            : `${Object.keys(m.players).length} of 4 approved · ${m.status.toLowerCase()}`,
+            : `${Object.keys(m.players).length} of 4 places · ${m.status.toLowerCase()}`,
         "status",
       ),
     );
@@ -567,6 +648,8 @@ $("composer").addEventListener("submit", (e) => {
   const text = $("message").value.trim();
   if (text) send(text);
 });
+$("message").addEventListener("input", fitComposer);
+fitComposer();
 $("message").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();

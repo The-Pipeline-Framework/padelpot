@@ -152,6 +152,16 @@ class NativePersistenceTest {
     assertEquals("CONFIRMED", result.status());
     assertEquals("nico", aggregates.matches().getFirst().change().ownerId());
     assertEquals(2, aggregates.matches().getFirst().players().size());
+    session.load();
+    assertEquals(2, session.snapshot().matches.get(match.id).players.size());
+    assertTrue(
+        session.player("nico").chat.stream()
+            .anyMatch(
+                m ->
+                    m.text().contains("recorded before this chat session")
+                        && m.text().contains(DemoSession.matchLabel(match.id))));
+    assertTrue(session.snapshot().matches.get(match.id).restoredPlayers.contains("nico"));
+    given().get("/api/owners/nico").then().statusCode(200);
   }
 
   @Test

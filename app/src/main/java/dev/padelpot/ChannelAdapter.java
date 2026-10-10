@@ -174,6 +174,24 @@ public class ChannelAdapter {
                       r.value());
                 })
             .toList();
+    String latestExecution;
+    synchronized (store) {
+      latestExecution =
+          store.snapshot().events.stream()
+              .filter(e -> e.type().equals("ROOT_STARTED") && owner.equals(e.data().get("ownerId")))
+              .map(e -> String.valueOf(e.data().get("executionId")))
+              .reduce((first, last) -> last)
+              .orElse("");
+    }
+    Map<String, String> latestRequest = Map.of();
+    if (!latestExecution.isBlank()) {
+      try {
+        var status = pipeline.getExecutionStatus(TENANT, latestExecution).await().indefinitely();
+        latestRequest = Map.of("executionId", latestExecution, "status", status.status().name());
+      } catch (NotFoundException historical) {
+        // Business participations can outlive memory-backed execution history.
+      }
+    }
     synchronized (store) {
       var p = store.player(owner);
       return Map.of(
@@ -191,6 +209,8 @@ public class ChannelAdapter {
           List.copyOf(p.chat),
           "pending",
           pending,
+          "latestRequest",
+          latestRequest,
           "intents",
           store.snapshot().intents.values().stream()
               .filter(

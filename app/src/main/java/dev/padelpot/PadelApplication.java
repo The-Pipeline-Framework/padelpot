@@ -38,8 +38,8 @@ public class PadelApplication implements PadelOperations {
       String task =
           s.mode().equals("chat")
               ? "CHAT. Continue the current owner request using any included question and owner"
-                    + " clarification. A location clarification is not post-match feedback. Broad"
-                    + " Barcelona availability is sufficient; do not require a district."
+                  + " clarification. A location clarification is not post-match feedback. Broad"
+                  + " Barcelona availability is sufficient; do not require a district."
               : "NEGOTIATE as "
                   + (s.actorId().equals(s.ownerId()) ? "candidate" : "organizer")
                   + ". Last peer action="
@@ -282,7 +282,9 @@ public class PadelApplication implements PadelOperations {
         return review(
             agreement,
             "participation",
-            "The agents reached a tentative agreement: "
+            "The agents reached a tentative agreement for match "
+                + matchLabel(m.id)
+                + ": "
                 + m.date
                 + " at "
                 + m.hour
@@ -375,7 +377,9 @@ public class PadelApplication implements PadelOperations {
         store.message(
             p.id,
             "agent",
-            "I found a "
+            "I found match "
+                + matchLabel(m.id)
+                + ", a "
                 + m.style
                 + " match at "
                 + m.hour
@@ -723,10 +727,15 @@ public class PadelApplication implements PadelOperations {
         store.message(
             owner,
             "agent",
-            "Four humans approved. Your Thursday doubles match at "
+            "Match "
+                + matchLabel(m.id)
+                + " now has four confirmed places for Thursday at "
                 + m.hour
-                + ":00 is confirmed. Court booking is"
-                + " outside this demo.");
+                + ":00. "
+                + (m.restoredPlayers.contains(owner)
+                    ? "Your recorded place was restored at startup. "
+                    : "")
+                + "Court booking is outside this demo.");
     var committed =
         done(
             s,

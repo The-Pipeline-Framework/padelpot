@@ -181,6 +181,66 @@ class InvariantTest {
   }
 
   @Test
+  void anOlderMatchConfirmationCannotBeMistakenForANewSearchCommitment() {
+    var previous = store.snapshot().matches.get("match");
+    previous.players.put("nico", "right");
+    previous.players.put("teo", "right");
+    previous.restoredPlayers.addAll(previous.players.keySet());
+    var newer = new DemoSession.Match();
+    newer.id = "new-match";
+    newer.organizer = "alba";
+    newer.hour = 19;
+    newer.style = "competitive";
+    newer.area = "Barcelona";
+    newer.date = "Thursday";
+    newer.level = "intermediate";
+    newer.players.put("alba", "left");
+    newer.players.put("nico", "right");
+    store.snapshot().matches.put(newer.id, newer);
+    var base = state("teo");
+    var search =
+        PadelApplication.copy(
+            base,
+            "teo",
+            "chat",
+            "",
+            0,
+            base.ownerVersion(),
+            0,
+            19,
+            "competitive",
+            "either",
+            "",
+            List.of(),
+            "Find a match");
+    var negotiation =
+        assertInstanceOf(
+                TurnOutcome.Again.class,
+                port.apply(
+                    new ModelTurn(search, new AgentDecision("find", 0, "", "", "", "", "Search"))))
+            .value();
+    assertEquals(newer.id, negotiation.matchId());
+    assertEquals(2, newer.players.size());
+    assertFalse(newer.players.containsKey("teo"));
+    var luz = state("luz");
+    port.answer(
+        new AnsweredReview(
+            new Review(luz, "participation", "", "", ""), new HumanAnswer("approve", ""), "luz"));
+    assertEquals("CONFIRMED", previous.status);
+    assertEquals(2, newer.players.size());
+    assertTrue(
+        store.player("teo").chat.stream()
+            .anyMatch(
+                message ->
+                    message.text().contains(DemoSession.matchLabel(previous.id))
+                        && message.text().contains("restored at startup")));
+    assertTrue(
+        store.snapshot().events.stream()
+            .filter(e -> e.type().equals("HUMAN_APPROVED"))
+            .allMatch(e -> e.data().get("ownerId").equals("luz")));
+  }
+
+  @Test
   void modelCannotAskToOverrideAKnownHardPreference() {
     var p = store.player("nico");
     p.facts.get("style").value = "social";

@@ -50,6 +50,7 @@ public class DemoSession {
         new dev.padelpot.domain.ChangeReceipt("fixture", "", "FIXTURE", "Synthetic state");
     public long version = 1;
     public Map<String, String> players = new LinkedHashMap<>();
+    public Set<String> restoredPlayers = new HashSet<>();
     public boolean cancelled, played;
   }
 
@@ -108,13 +109,36 @@ public class DemoSession {
       m.played = match.played();
       m.change = match.change();
       match.players().forEach(p -> m.players.put(p.ownerId(), p.side()));
+      m.restoredPlayers.addAll(m.players.keySet());
       db.matches.put(m.id, m);
+      for (String owner : m.players.keySet())
+        message(
+            owner,
+            "agent",
+            "Restored your recorded participation in match "
+                + matchLabel(m.id)
+                + ": "
+                + m.date
+                + " at "
+                + m.hour
+                + ":00, "
+                + m.area
+                + ", "
+                + m.style
+                + ". This place was recorded before this chat session. Match status: "
+                + m.status.toLowerCase()
+                + ".");
     }
   }
 
   public synchronized void reset(boolean onboarding) {
     if (aggregates != null) aggregates.clearFixtures();
     seed(onboarding);
+  }
+
+  public static String matchLabel(String id) {
+    String suffix = id.substring(id.lastIndexOf(':') + 1);
+    return "#" + suffix.substring(0, Math.min(8, suffix.length()));
   }
 
   private void seed(boolean onboarding) {
