@@ -4,6 +4,8 @@
 
 A local, open-source padel coordination experiment for Hacktoberfest 2026 — Touch Grass. Four fictional owners talk privately with personal agents. Gemma proposes and negotiates a doubles match; deterministic rules protect private fields, enforce capacity and wait for each owner's explicit approval. No court is booked.
 
+![PadelPot chat showing Alba's match request and explicit participation approval](docs/images/padelpot-updated.jpg)
+
 ## Run
 
 Requires Java 21 and Python 3 for the optional evidence runner. The included Maven wrapper downloads released dependencies. TPF **26.9.4**, Quarkus **3.39.2**.
@@ -52,6 +54,8 @@ Native TPF replay is written to `output/tpf-replay`. The evidence runner exports
 Generated state, recordings and evidence are local files excluded from Git. See [scenario instructions](docs/scenarios.md).
 
 ## Architecture and boundaries
+
+**Typed Core / Smart Shell.** TPF is inspired by [Functional Core / Imperative Shell (FCIS)](https://pipelineframework.org/architecture/fcis). Its agentic capabilities extend that separation: typed contracts and application rules define the decisions, while the framework coordinates model Queries, Command effects, bounded execution and human interaction. In PadelPot, Gemma proposes; deterministic rules and owner approvals control what becomes a commitment. The [architecture diagrams](docs/architecture.md) show how those responsibilities fit together.
 
 One application process, four logical agents, one inference at a time. Versioned personas and the organizer's match aggregate are application-owned JSON state. TPF owns typed contracts, Queries, Commands, nested recursion, correlation, regular-step Await completion and native execution evidence. See [architecture](docs/architecture.md), [privacy and information leaving the app](docs/privacy.md), and [implementation plan](docs/implementation-plan.md).
 
