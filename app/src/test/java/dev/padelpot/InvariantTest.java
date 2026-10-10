@@ -80,6 +80,107 @@ class InvariantTest {
   }
 
   @Test
+  void chatQuestionsRetainTheOwnerRequestWithoutGrantingAuthority() {
+    var base = state("luz");
+    var chat =
+        PadelApplication.copy(
+            base,
+            "luz",
+            "chat",
+            "",
+            0,
+            base.ownerVersion(),
+            0,
+            19,
+            "competitive",
+            "left",
+            "",
+            List.of(),
+            "Find a match after work");
+    for (String action : List.of("message", "ask_owner")) {
+      var outcome =
+          port.apply(
+              new ModelTurn(
+                  chat,
+                  new AgentDecision(action, 0, "", "", "", "", "Which broad area works for you?")));
+      var question = assertInstanceOf(TurnOutcome.ReviewRequired.class, outcome).value();
+      assertEquals("conversation", question.kind());
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> new OwnerProjector().project(question, new HumanAnswer("approve", ""), "luz"));
+      assertEquals(
+          "UNAUTHORIZED",
+          result(port.answer(new AnsweredReview(question, new HumanAnswer("approve", ""), "luz")))
+              .status());
+      var continued =
+          assertInstanceOf(
+                  OwnerInteraction.Again.class,
+                  port.answer(
+                      new AnsweredReview(
+                          question, new HumanAnswer("clarify", "Anywhere in Barcelona"), "luz")))
+              .value();
+      assertEquals(chat.requestId(), continued.requestId());
+      assertEquals(chat.deadline(), continued.deadline());
+      assertEquals("chat", continued.mode());
+      assertEquals(1, continued.turn(), "The resumed model Command needs a distinct turn identity");
+      assertTrue(continued.ownerText().contains(chat.ownerText()));
+      assertTrue(continued.ownerText().contains("Anywhere in Barcelona"));
+      assertEquals(1, store.snapshot().matches.get("match").players.size());
+    }
+  }
+
+  @Test
+  void conversationalRepliesRespectVersionExpiryAndTheFinalCheckpoint() {
+    var base = state("luz");
+    var chat =
+        PadelApplication.copy(
+            base,
+            "luz",
+            "chat",
+            "",
+            0,
+            base.ownerVersion(),
+            0,
+            19,
+            "competitive",
+            "left",
+            "",
+            List.of(),
+            "Find a match");
+    var question = new Review(chat, "conversation", "Which broad area?", "", "");
+    var reply = new AnsweredReview(question, new HumanAnswer("clarify", "Barcelona"), "luz");
+    store.player("luz").version++;
+    assertEquals("STALE_PERSONA", result(port.answer(reply)).status());
+    assertEquals("NEEDS_FRESH_REQUEST", result(port.answerFinal(reply)).status());
+    var expired =
+        new TurnState(
+            chat.requestId(),
+            "luz",
+            "luz",
+            "chat",
+            "",
+            0,
+            1L,
+            chat.ownerVersion(),
+            0L,
+            19,
+            "competitive",
+            "left",
+            "",
+            List.of(),
+            "Find a match");
+    assertEquals(
+        "EXPIRED",
+        result(
+                port.answer(
+                    new AnsweredReview(
+                        new Review(expired, "conversation", "Which area?", "", ""),
+                        new HumanAnswer("clarify", "Barcelona"),
+                        "luz")))
+            .status());
+  }
+
+  @Test
   void modelCannotAskToOverrideAKnownHardPreference() {
     var p = store.player("nico");
     p.facts.get("style").value = "social";

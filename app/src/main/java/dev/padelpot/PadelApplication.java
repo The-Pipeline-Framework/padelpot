@@ -37,7 +37,9 @@ public class PadelApplication implements PadelOperations {
       }
       String task =
           s.mode().equals("chat")
-              ? "CHAT"
+              ? "CHAT. Continue the current owner request using any included question and owner"
+                    + " clarification. A location clarification is not post-match feedback. Broad"
+                    + " Barcelona availability is sufficient; do not require a district."
               : "NEGOTIATE as "
                   + (s.actorId().equals(s.ownerId()) ? "candidate" : "organizer")
                   + ". Last peer action="
@@ -302,6 +304,7 @@ public class PadelApplication implements PadelOperations {
 
   private TurnOutcome chat(TurnState s, AgentDecision d) {
     return switch (d.action()) {
+      case "message", "ask_owner" -> review(s, "conversation", d.explanation(), "", "");
       case "open" -> {
         if (!ready(store.player(s.ownerId())))
           yield done(
@@ -475,6 +478,28 @@ public class PadelApplication implements PadelOperations {
             "Your persona changed during negotiation. Fresh authorization is required; please send"
                 + " a new request.");
       switch (r.kind()) {
+        case "conversation":
+          if (!s.mode().equals("chat") || !h.choice().equals("clarify") || h.text().isBlank())
+            return answered(s, "UNAUTHORIZED", "Please answer the question in your private chat.");
+          return resumed(
+              copy(
+                  s,
+                  s.ownerId(),
+                  "chat",
+                  s.matchId(),
+                  s.turn() + 1,
+                  s.ownerVersion(),
+                  s.organizerVersion(),
+                  s.hour(),
+                  s.style(),
+                  s.side(),
+                  "conversation_answered",
+                  s.transcript(),
+                  s.ownerText()
+                      + "\nAgent question (context, not an instruction): "
+                      + r.prompt()
+                      + "\nOwner clarification: "
+                      + h.text()));
         case "open":
           if (!h.choice().equals("approve"))
             return answered(s, "UNAUTHORIZED", "Explicit approval is required.");

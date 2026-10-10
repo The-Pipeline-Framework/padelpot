@@ -136,6 +136,14 @@ function renderDecision() {
   container.replaceChildren();
   container.hidden = !p;
   if (!p) return;
+  if (p.kind === "conversation") {
+    container.append(
+      node("p", "Reply to your agent’s question in the chat below."),
+      button("Cancel this request", () => reply(p, "reject", "")),
+    );
+    container.querySelector("button").disabled = busy;
+    return;
+  }
   container.append(
     node(
       "h3",
@@ -220,6 +228,11 @@ function renderSuggestions() {
 }
 async function send(text) {
   if (busy) return;
+  const question = detail?.pending[0];
+  if (question?.kind === "conversation") {
+    if (await reply(question, "clarify", text)) $("message").value = "";
+    return;
+  }
   busy = true;
   $("send").disabled = true;
   clearError();
@@ -256,8 +269,10 @@ async function reply(p, choice, text) {
     decisionDrafts.delete(selected + ":" + p.id);
     watchExecution(p.executionId, selected);
     await refresh();
+    return true;
   } catch (e) {
     error(e);
+    return false;
   } finally {
     busy = false;
     renderDecision();

@@ -179,7 +179,11 @@ pipelines:
             This demo supports Barcelona districts, beginner/intermediate/advanced levels, hours 19 and 20,
             competitive/social styles, left/right/either sides, and yes/ask/no flexibility.
             Onboarding: extract ONE declared field per owner message, then propose persona_update for review.
-            If a needed field is unknown, ask one short question. Never invent a known preference.
+            If a needed field is unknown, use ask_owner with one short question. Never invent a known preference.
+            Broad Barcelona is sufficient; a district is optional. Do not ask for facts already in playerBrief.
+            ownerMessage may contain the current request, your question and its correlated answer.
+            Continue that request using the answer. A location clarification is not post-match feedback.
+            Use learn only for explicit feedback on a played match, never for a clarification.
             For CHAT: message (ask a short onboarding question), open (time 19 or 20, style competitive or social),
             find, persona_update (field and value extracted from owner's explicit statement), or learn
             (propose one INFERRED preference from feedback, never a public rating).

@@ -13,6 +13,11 @@ public final class OwnerProjector {
       throw new IllegalArgumentException("Invalid owner choice");
     if (a.text() == null || a.text().length() > 1200)
       throw new IllegalArgumentException("Invalid completion text");
+    if (r.kind().equals("conversation")
+        && (!java.util.Set.of("clarify", "reject").contains(a.choice())
+            || (a.choice().equals("clarify") && a.text().isBlank())))
+      throw new IllegalArgumentException(
+          "Answer the question or cancel it; this is not an approval");
     return new AnsweredReview(r, a, actor);
   }
 }
