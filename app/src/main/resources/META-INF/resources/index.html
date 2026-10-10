@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PadelPot</title>
+    <link rel="stylesheet" href="/style.css?v=0.1.2" />
+  </head>
+  <body>
+    <main class="app">
+      <aside class="sidebar">
+        <a class="brand" href="/" aria-label="PadelPot home"
+          ><span class="brand-mark">p<span>•</span></span
+          ><span>PadelPot<small>Padel matchmaking.</small></span></a
+        >
+        <div class="section-label">YOUR DEMO CONVERSATIONS <span>04</span></div>
+        <nav id="owners" aria-label="Switch fictional owner"></nav>
+        <section id="match" aria-label="Match opportunity"></section>
+        <div class="sidebar-foot">
+          <span class="local-dot"></span>Local demo · fictional players<button
+            id="reset"
+            class="text-button"
+          >
+            Reset fixtures
+          </button>
+        </div>
+      </aside>
+      <section class="conversation">
+        <header class="chat-header">
+          <span id="avatar" class="avatar"></span>
+          <div>
+            <h2 id="owner-name">Connecting…</h2>
+            <p id="agent-status">Your private padel agent</p>
+          </div>
+          <div class="header-actions">
+            <button id="persona-button" aria-expanded="false">
+              My preferences</button
+            ><button
+              id="developer-button"
+              class="icon-button"
+              aria-label="Open agent activity"
+              title="Agent activity"
+            >
+              ↗
+            </button>
+          </div>
+        </header>
+        <div class="chat-top">
+          <span>YOUR PRIVATE CONVERSATION</span
+          ><span>Gemma powered <i>✦</i></span>
+        </div>
+        <div
+          id="messages"
+          class="messages"
+          role="log"
+          aria-live="polite"
+          aria-label="Private conversation"
+        ></div>
+        <section
+          id="decision"
+          class="decision"
+          aria-label="Your decision"
+          hidden
+        ></section>
+        <div class="composer-wrap">
+          <div id="suggestions" class="suggestions"></div>
+          <form id="composer">
+            <label for="message" class="sr-only">Message your agent</label
+            ><textarea
+              id="message"
+              placeholder="Tell your agent what you have in mind…"
+              rows="1"
+              maxlength="1200"
+            ></textarea
+            ><button id="send" type="submit" aria-label="Send message">
+              ↑
+            </button>
+          </form>
+          <div class="composer-note">
+            Your agent negotiates. <strong>You make the commitment.</strong
+            ><span id="provider"></span>
+          </div>
+          <p id="error" role="alert" hidden></p>
+        </div>
+      </section>
+      <aside id="drawer" class="drawer" hidden>
+        <header>
+          <h2 id="drawer-title"></h2>
+          <button id="drawer-close" aria-label="Close panel">×</button>
+        </header>
+        <div id="drawer-content"></div>
+      </aside>
+    </main>
+    <script type="module" src="/app.js?v=0.1.2"></script>
+  </body>
+</html>

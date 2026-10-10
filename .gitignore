@@ -1,0 +1,13 @@
+**/target/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+/output/
+/docs/internal-implementation-metrics.json
+/docs/dev-submission.md
+/docs/qualification.md
+.coderabbit/
+__pycache__/
+*.pyc

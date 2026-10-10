@@ -1,0 +1,9 @@
+# Beyond this attended demonstration
+
+PadelPot is a single-process experiment using fictional data. A production application would need owner authentication and authorization on every channel, tenant isolation, encrypted storage and transport, secret management, retention/deletion controls for chat and telemetry, and a security assessment of agent inputs and inference providers.
+
+Replace local JSON business persistence with transactional storage while preserving the organizer's atomic capacity authority. Configure and verify durable TPF execution, interaction and Command-effect providers; demonstrate restart recovery, cancellation and late-message delivery before adding real messaging adapters. Investigate the observed intermittent recursive parent-context failure upstream rather than bypassing execution checks.
+
+Add backups, migrations, deployment configuration, operational monitoring and CI. Evaluate negotiation quality, cost and failure rates across Gemma versions and real provider routing. Exercise OpenRouter's strict privacy configuration with an authorized account; an eligible endpoint must be available for every request. Improve conversational authorization for multiple unknown preferences without weakening explicit participation approval.
+
+Future WhatsApp, Signal or email adapters must enforce their own identity, delivery and channel privacy properties using the existing application envelope. Club booking, public reputation and independent-device agents remain separate product decisions. None is required to run this local demo.

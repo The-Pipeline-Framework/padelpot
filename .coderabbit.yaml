@@ -1,0 +1,6 @@
+reviews:
+  path_filters:
+    - '!output/**'
+    - '!**/*.idl.json'
+    - '!mvnw*'
+    - '!.mvn/**'
