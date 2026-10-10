@@ -3,7 +3,7 @@ appName: PadelPot
 basePackage: dev.padelpot
 transport: LOCAL
 platform: COMPUTE
-contract: { input: TurnState, output: Result }
+contract: { input: OwnerInteraction, output: Result }
 connectors:
   application:
     provider: padelpot.application
@@ -12,8 +12,46 @@ connectors:
   model:
     provider: llm.query.openai.compatible
     version: 1
-    config: { model: google/gemma-3-27b-it, baseUrl: 'https://openrouter.ai/api/v1', connection: padelpot-openrouter }
+    config: { model: google/gemma-4-26b-a4b-it, baseUrl: 'https://openrouter.ai/api/v1', connection: padelpot-openrouter }
 types:
+  ChangeReceipt:
+    fields: [[requestId, string], [ownerId, string], [status, string], [message, string]]
+  PersonaFact:
+    fields: [[field, string], [value, string], [source, string], [disclosure, string]]
+  Owner:
+    fields:
+      - [id, string]
+      - [name, string]
+      - [color, string]
+      - [version, int64]
+      - { name: facts, repeated: PersonaFact }
+      - { name: blocked, repeated: string }
+      - [change, ChangeReceipt]
+    mappings:
+      persistence:
+        type: dev.padelpot.persistence.OwnerEntity
+        mapper: dev.padelpot.persistence.OwnerMapper
+  Participation:
+    fields: [[ownerId, string], [side, string]]
+  Match:
+    fields:
+      - [id, string]
+      - [organizer, string]
+      - [style, string]
+      - [area, string]
+      - [date, string]
+      - [level, string]
+      - [status, string]
+      - [hour, int32]
+      - [version, int64]
+      - { name: players, repeated: Participation }
+      - [cancelled, bool]
+      - [played, bool]
+      - [change, ChangeReceipt]
+    mappings:
+      persistence:
+        type: dev.padelpot.persistence.MatchEntity
+        mapper: dev.padelpot.persistence.MatchMapper
   TurnState:
     java: dev.padelpot.domain.TurnState
     fields:
@@ -92,9 +130,15 @@ types:
   AgentEnd:
     java: dev.padelpot.domain.AgentEnd
     variants: { reviewRequired: Review, finished: Result }
-  ResumeOutcome:
-    java: dev.padelpot.domain.ResumeOutcome
-    variants: { again: TurnState, finished: Result }
+  PlayObservation:
+    fields: [{ name: owners, repeated: Owner }, [match, Match]]
+    mappings:
+      persistence:
+        type: dev.padelpot.persistence.PlayObservationEntity
+        mapper: dev.padelpot.persistence.PlayObservationMapper
+  OwnerInteraction:
+    java: dev.padelpot.domain.OwnerInteraction
+    variants: { again: TurnState, finished: Result, ownerChanged: Owner, matchChanged: Match, observedPlay: PlayObservation }
   AgentResult:
     java: dev.padelpot.domain.AgentResult
     fields: [[outcome, AgentEnd]]
@@ -184,21 +228,40 @@ pipelines:
         java:
           input: dev.padelpot.domain.TurnState
           output: dev.padelpot.domain.AgentResult
-      - name: Finish bounded agent exchange
-        service: dev.padelpot.FinishOutcome
+      - name: Return owner review
+        service: dev.padelpot.FinishReview
         cardinality: ONE_TO_ONE
         input: LoopEnds
-        accepts: [Review, Result, AgentResult]
+        accepts: [Review]
+        output: AgentResult
+        java:
+          input: dev.padelpot.domain.Review
+          output: dev.padelpot.domain.AgentResult
+      - name: Return finished negotiation
+        service: dev.padelpot.FinishNegotiation
+        cardinality: ONE_TO_ONE
+        input: LoopEnds
+        accepts: [Result]
+        output: AgentResult
+        java:
+          input: dev.padelpot.domain.Result
+          output: dev.padelpot.domain.AgentResult
+      - name: Return nested agent result
+        service: dev.padelpot.FinishAgent
+        cardinality: ONE_TO_ONE
+        input: LoopEnds
+        accepts: [AgentResult]
         output: AgentResult
         terminal: true
         java:
-          input: java.lang.Object
+          input: dev.padelpot.domain.AgentResult
           output: dev.padelpot.domain.AgentResult
 steps:
   - name: Run personal agent
     pipeline: personal-agent
     cardinality: ONE_TO_ONE
-    input: TurnState
+    input: OwnerInteraction
+    accepts: [TurnState]
     output: AgentResult
     java:
       input: dev.padelpot.domain.TurnState
@@ -218,7 +281,6 @@ steps:
     await:
       operationOutput: { type: Review, java: dev.padelpot.domain.Review }
       timeout: PT15M
-      idempotency: { fields: [state.requestId, kind] }
       correlation: { strategy: interactionId }
       transport: { type: interaction-api }
     java:
@@ -228,7 +290,7 @@ steps:
     kind: command
     cardinality: ONE_TO_ONE
     input: AnsweredReview
-    output: ResumeOutcome
+    output: OwnerInteraction
     using: application
     operation: human.apply
     operationVersion: 1
@@ -237,11 +299,11 @@ steps:
     duplicatePolicy: RETURN_RECORDED
     java:
       input: dev.padelpot.domain.AnsweredReview
-      output: dev.padelpot.domain.ResumeOutcome
+      output: dev.padelpot.domain.OwnerInteraction
   - name: Negotiate clarified boundaries
     pipeline: personal-agent
     cardinality: ONE_TO_ONE
-    input: ResumeOutcome
+    input: OwnerInteraction
     accepts: [TurnState]
     output: AgentResult
     java:
@@ -262,7 +324,6 @@ steps:
     await:
       operationOutput: { type: Review, java: dev.padelpot.domain.Review }
       timeout: PT15M
-      idempotency: { fields: [state.requestId, kind] }
       correlation: { strategy: interactionId }
       transport: { type: interaction-api }
     java:
@@ -272,7 +333,7 @@ steps:
     kind: command
     cardinality: ONE_TO_ONE
     input: AnsweredReview
-    output: Result
+    output: OwnerInteraction
     using: application
     operation: human.final
     operationVersion: 1
@@ -281,7 +342,35 @@ steps:
     duplicatePolicy: RETURN_RECORDED
     java:
       input: dev.padelpot.domain.AnsweredReview
-      output: dev.padelpot.domain.Result
+      output: dev.padelpot.domain.OwnerInteraction
+  - name: Stop further negotiation
+    service: dev.padelpot.StopFurtherNegotiation
+    cardinality: ONE_TO_ONE
+    input: OwnerInteraction
+    accepts: [TurnState]
+    output: Result
+    java: { input: dev.padelpot.domain.TurnState, output: dev.padelpot.domain.Result }
+  - name: ObservePlayedMatch
+    service: dev.padelpot.ObservePlayedMatch
+    cardinality: ONE_TO_ONE
+    input: OwnerInteraction
+    accepts: [PlayObservation]
+    output: Result
+    java: { input: dev.padelpot.domain.PlayObservation, output: dev.padelpot.domain.Result }
+  - name: PublishOwnerResult
+    service: dev.padelpot.PublishOwnerResult
+    cardinality: ONE_TO_ONE
+    input: OwnerInteraction
+    accepts: [Owner]
+    output: Result
+    java: { input: dev.padelpot.domain.Owner, output: dev.padelpot.domain.Result }
+  - name: PublishMatchResult
+    service: dev.padelpot.PublishMatchResult
+    cardinality: ONE_TO_ONE
+    input: OwnerInteraction
+    accepts: [Match]
+    output: Result
+    java: { input: dev.padelpot.domain.Match, output: dev.padelpot.domain.Result }
   - name: Publish private owner result
     service: dev.padelpot.FinishResult
     cardinality: ONE_TO_ONE
@@ -291,3 +380,12 @@ steps:
     java:
       input: dev.padelpot.domain.Result
       output: dev.padelpot.domain.Result
+
+aspects:
+  persistence:
+    enabled: true
+    scope: STEPS
+    position: BEFORE_STEP
+    config:
+      targetSteps: [PublishOwnerResult, PublishMatchResult, ObservePlayedMatch]
+      pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService

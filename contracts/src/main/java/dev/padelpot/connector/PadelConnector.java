@@ -10,7 +10,7 @@ import org.pipelineframework.connector.*;
 
 @ApplicationScoped
 public class PadelConnector implements ConnectorProvider<PadelConnector.Config> {
-  @Inject Instance<ApplicationPort> port;
+  @Inject Instance<PadelOperations> application;
 
   public record Config(String fixture) {}
 
@@ -55,7 +55,7 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
     public CompletionStage<QueryOutcome<ModelInput>> query(
         QueryInvocation<TurnState, OperationConfig, ModelInput> i) {
       return CompletableFuture.completedFuture(
-          new QueryOutcome.Found<>(p.port.get().context(i.input())));
+          new QueryOutcome.Found<>(p.application.get().context(i.input())));
     }
   }
 
@@ -79,12 +79,12 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
         CommandInvocation<ModelTurn, OperationConfig> i) {
       return CompletableFuture.completedFuture(
           new CommandOutcome.Succeeded<>(
-              p.port.get().apply(i.input()), CommandConfirmation.none(), List.of()));
+              p.application.get().apply(i.input()), CommandConfirmation.none(), List.of()));
     }
   }
 
   private static final class Answer
-      implements CommandOperation<AnsweredReview, OperationConfig, ResumeOutcome> {
+      implements CommandOperation<AnsweredReview, OperationConfig, OwnerInteraction> {
     private final PadelConnector p;
 
     Answer(PadelConnector p) {
@@ -99,21 +99,16 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
       return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.answer", 1));
     }
 
-    public CompletionStage<CommandOutcome<ResumeOutcome>> dispatch(
+    public CompletionStage<CommandOutcome<OwnerInteraction>> dispatch(
         CommandInvocation<AnsweredReview, OperationConfig> i) {
       return CompletableFuture.completedFuture(
           new CommandOutcome.Succeeded<>(
-              resume(p.port.get().answer(i.input())), CommandConfirmation.none(), List.of()));
+              p.application.get().answer(i.input()), CommandConfirmation.none(), List.of()));
     }
   }
 
-  private static ResumeOutcome resume(TurnOutcome o) {
-    if (o instanceof TurnOutcome.Again a) return new ResumeOutcome.Again(a.value());
-    return new ResumeOutcome.Finished(((TurnOutcome.Finished) o).value());
-  }
-
   private static final class FinalAnswer
-      implements CommandOperation<AnsweredReview, OperationConfig, Result> {
+      implements CommandOperation<AnsweredReview, OperationConfig, OwnerInteraction> {
     private final PadelConnector p;
 
     FinalAnswer(PadelConnector p) {
@@ -128,9 +123,9 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
       return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.final", 1));
     }
 
-    public CompletionStage<CommandOutcome<Result>> dispatch(
+    public CompletionStage<CommandOutcome<OwnerInteraction>> dispatch(
         CommandInvocation<AnsweredReview, OperationConfig> i) {
-      Result r = p.port.get().answerFinal(i.input());
+      OwnerInteraction r = p.application.get().answerFinal(i.input());
       return CompletableFuture.completedFuture(
           new CommandOutcome.Succeeded<>(r, CommandConfirmation.none(), List.of()));
     }

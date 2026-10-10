@@ -9,6 +9,17 @@
   <artifactId>padelpot-app</artifactId>
   <dependencies>
     <dependency>
+      <groupId>org.pipelineframework</groupId>
+      <artifactId>persistence-plugin</artifactId>
+      <version>${tpf.version}</version>
+      <exclusions>
+        <exclusion><groupId>io.quarkus</groupId><artifactId>quarkus-hibernate-reactive-panache</artifactId></exclusion>
+        <exclusion><groupId>io.quarkus</groupId><artifactId>quarkus-reactive-pg-client</artifactId></exclusion>
+      </exclusions>
+    </dependency>
+    <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-hibernate-orm</artifactId></dependency>
+    <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-jdbc-h2</artifactId></dependency>
+    <dependency>
       <groupId>dev.padelpot</groupId>
       <artifactId>padelpot-contracts</artifactId>
       <version>${project.version}</version>
@@ -34,6 +45,11 @@
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-junit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-junit-mockito</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

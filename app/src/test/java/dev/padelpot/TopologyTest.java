@@ -21,7 +21,7 @@ public class TopologyTest {
     }
   }
 
-  @Inject DemoStore store;
+  @Inject DemoSession store;
 
   @Test
   void oneRequestOneRootAndCorrelatedHumanResume() throws Exception {

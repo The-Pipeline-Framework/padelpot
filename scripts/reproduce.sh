@@ -5,12 +5,12 @@ project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$project_dir"
 provider="${1:-openrouter}"
 case "$provider" in
- openrouter) profile=(); config=pipeline.yaml; : "${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY; no fallback is enabled}" ;;
- ollama) profile=(-Pollama); config=pipeline.ollama.yaml ;;
+ openrouter) maven_args=(-q); config=pipeline.yaml; : "${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY; no fallback is enabled}" ;;
+ ollama) maven_args=(-q -Pollama); config=pipeline.ollama.yaml ;;
  *) echo 'Usage: scripts/reproduce.sh [openrouter|ollama]' >&2; exit 1 ;;
 esac
 if curl -fsS --max-time 2 http://127.0.0.1:8080/api/view >/dev/null 2>&1; then echo 'Port 8080 already has an application. Stop it before building another demo.' >&2; exit 1; fi
-./mvnw -q "${profile[@]}" clean package -DskipTests
+./mvnw "${maven_args[@]}" clean package -DskipTests
 python3 scripts/archive-run.py
 export PIPELINE_CONFIG="$project_dir/app/src/main/resources/$config"
 java -jar app/target/quarkus-app/quarkus-run.jar >output/demo-server.log 2>&1 &

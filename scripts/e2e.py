@@ -64,27 +64,31 @@ assert match['status']=='CONFIRMED' and len(match['players'])==4
 assert list(match['players'].values()).count('left')==2 and list(match['players'].values()).count('right')==2
 assert any(p['kind']=='clarify' for p in roots[1]['humanReplies']), 'Nico must explicitly authorize the 20:00 → 19:00 compromise.'
 assert sum(p['kind'] in ('open','participation') for r in roots for p in r['humanReplies'])==4, 'Four humans must approve their own participation.'
-api('/matches/'+match['id']+'/simulate',{'ownerId':'alba'})
+before_play=files()
+played=api('/matches/'+match['id']+'/simulate',{'ownerId':'alba'})
+time.sleep(.2)
+roots.append({'ownerId':'alba','executionId':played['executionId'],'humanReplies':[],
+    'nativeSegments':sorted(files()-before_play),'status':'SUCCEEDED','stimulus':'simulate-play'})
 roots.append(request_and_review('luz','Post-match feedback on our simulated match: I enjoyed the friendly pace. Please infer that I may prefer social matches and propose that style change for review. This is an inference from feedback.',['inference']))
 persona=api('/owners/luz')['persona']
 assert persona['style']['value']=='social' and persona['style']['source']=='inferred'
 assert persona['level']['source']=='declared' and persona['lastPlayedHour']['source']=='observed'
 dev=api('/developer'); starts=[e for e in dev['events'] if e['type']=='ROOT_STARTED']
-assert len(starts)==5 and len({r['executionId'] for r in roots})==5, 'Exactly five roots, no roots from internal recursion or human replies.'
+assert len(starts)==6 and len({r['executionId'] for r in roots})==6, 'Exactly six roots, no roots from internal recursion or human replies.'
 assert all(api('/executions/'+r['executionId'])['status']=='SUCCEEDED' for r in roots)
 # Native exporter is per segment plus a shared Await control stream, verified against 26.9.4 source.
 # Preserve original native documents; the dataset adds grouping only, never substitutes events/topology.
 controls=sorted(p.name for p in args.replay.glob('*await-control*.json'))
 assert len(controls)==1
 await_count=sum(len(r['humanReplies']) for r in roots)
-assert len(files())==5+await_count, f'Expected {5+await_count} native segments, found {len(files())}'
-assert len(list(args.replay.glob('*.json')))==5+await_count+1
+assert len(files())==6+await_count, f'Expected {6+await_count} native segments, found {len(files())}'
+assert len(list(args.replay.glob('*.json')))==6+await_count+1
 args.output.mkdir(parents=True, exist_ok=True)
 (args.output/'native').mkdir(exist_ok=True); (args.output/'roots').mkdir(exist_ok=True)
 native={p.name:json.loads(p.read_text()) for p in args.replay.glob('*.json')}
 control_events=native[controls[0]]['events']
 native_root_ids={e.get('attributes',{}).get('tpf.await.execution_id') for e in control_events}; native_root_ids.discard(None)
-assert native_root_ids=={r['executionId'] for r in roots}, 'Native Await lineage must match five admitted roots.'
+assert native_root_ids=={r['executionId'] for r in roots if r['humanReplies']}, 'Native Await lineage must match the five conversational roots.'
 for name,d in native.items():
     content=json.dumps(d)
     assert 'PRIVATE_CANARY_' not in content, 'Protected persona data must never enter replay.'
@@ -95,7 +99,7 @@ for r in roots:
     # Exact native documents embedded unchanged; lifecycle control document is referenced unchanged.
     doc={**r,'nativeDocuments':[native[name] for name in r['nativeSegments']]}
     (args.output/'roots'/(r['executionId']+'.json')).write_text(json.dumps(doc,indent=2))
-assert len(list((args.output/'roots').glob('*.json')))==5
-manifest={'scenario':'fourOwnersNegotiateAndLearn','result':'PASS','provider':provider,'tpfVersion':'26.9.4','startedAtEpoch':started,'finishedAtEpoch':time.time(),'expectedRoots':5,'actualRoots':len(roots),'nativeSegmentCount':len(files()),'nativeControlCount':len(controls),'humanReplies':await_count,'roots':roots,'match':api('/view')['matches'][0],'approvedPersona':{k:persona[k] for k in ('style','level','lastPlayedHour')},'businessEvents':dev['events'],'nativeDocuments':[{ 'file':name,'sha256':hashlib.sha256((args.replay/name).read_bytes()).hexdigest()} for name in sorted(native)],'limitations':['Automated proof simulates explicit human replies; interactive UI requires the owner to click.','Native replay exports segments plus Await control events; grouped root files preserve exact native documents.','OpenRouter was not exercised when provider is Ollama.']}
+assert len(list((args.output/'roots').glob('*.json')))==6
+manifest={'scenario':'fourOwnersNegotiateAndLearn','result':'PASS','provider':provider,'tpfVersion':'26.9.4','startedAtEpoch':started,'finishedAtEpoch':time.time(),'expectedRoots':6,'actualRoots':len(roots),'nativeSegmentCount':len(files()),'nativeControlCount':len(controls),'humanReplies':await_count,'roots':roots,'match':api('/view')['matches'][0],'approvedPersona':{k:persona[k] for k in ('style','level','lastPlayedHour')},'businessEvents':dev['events'],'nativeDocuments':[{ 'file':name,'sha256':hashlib.sha256((args.replay/name).read_bytes()).hexdigest()} for name in sorted(native)],'limitations':['Automated proof simulates explicit human replies; interactive UI requires the owner to click.','Native replay exports segments plus Await control events; grouped root files preserve exact native documents.','Deterministic fixtures do not validate model inference.' if 'fixture' in provider.lower() else 'OpenRouter was not exercised when provider is Ollama.']}
 (args.output/'demo-execution-dataset.json').write_text(json.dumps(manifest,indent=2))
-print(f'PASS: four owners, actual {provider}, five roots, {await_count} human replies, {len(native)} native documents.',flush=True)
+print(f'PASS: four owners, provider={provider}, six roots, {await_count} human replies, {len(native)} native documents.',flush=True)

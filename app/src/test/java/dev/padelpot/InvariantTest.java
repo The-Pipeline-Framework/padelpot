@@ -2,32 +2,26 @@ package dev.padelpot;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.padelpot.domain.*;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.io.TempDir;
 
 class InvariantTest {
-  @TempDir Path temp;
-  DemoStore store;
-  BusinessPort port;
+  DemoSession store;
+  PadelApplication port;
 
   @BeforeEach
   void setup() {
-    store = new DemoStore();
-    store.json = new ObjectMapper();
-    store.file = temp.resolve("state.json").toString();
+    store = new DemoSession();
     store.reset(false);
-    port = new BusinessPort();
+    port = new PadelApplication();
     port.store = store;
     seedMatch();
   }
 
   void seedMatch() {
-    var m = new DemoStore.Match();
+    var m = new DemoSession.Match();
     m.id = "match";
     m.organizer = "alba";
     m.hour = 19;
@@ -40,7 +34,7 @@ class InvariantTest {
 
   TurnState state(String owner) {
     var p = store.player(owner);
-    var i = new DemoStore.Intent();
+    var i = new DemoSession.Intent();
     i.requestId = "intent-" + owner;
     i.ownerId = owner;
     i.matchId = "match";
@@ -69,6 +63,20 @@ class InvariantTest {
 
   Result result(TurnOutcome o) {
     return ((TurnOutcome.Finished) o).value();
+  }
+
+  Result result(OwnerInteraction o) {
+    return switch (o) {
+      case OwnerInteraction.Finished finished -> finished.value();
+      case OwnerInteraction.MatchChanged match ->
+          new Result("", "", "CONFIRMED", "", match.value().id());
+      case OwnerInteraction.OwnerChanged owner ->
+          new Result("", owner.value().id(), "PERSONA_UPDATED", "", "");
+      case OwnerInteraction.ObservedPlay ignored ->
+          throw new AssertionError("Expected an owner decision");
+      case OwnerInteraction.Again ignored ->
+          throw new AssertionError("Expected a completed decision");
+    };
   }
 
   @Test
@@ -135,7 +143,7 @@ class InvariantTest {
     m.players.put("luz", "left");
     var s = state("teo");
     try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
-      var calls = new ArrayList<Callable<TurnOutcome>>();
+      var calls = new ArrayList<Callable<OwnerInteraction>>();
       for (int i = 0; i < 30; i++)
         calls.add(
             () ->
@@ -358,17 +366,17 @@ class InvariantTest {
     var result =
         port.answer(
             new AnsweredReview(r, new HumanAnswer("counter", "Could we consider 20:00?"), "nico"));
-    assertInstanceOf(TurnOutcome.Again.class, result);
+    assertInstanceOf(OwnerInteraction.Again.class, result);
     assertEquals(1, store.snapshot().matches.get("match").players.size());
     assertTrue(store.snapshot().intents.get(s.requestId()).permittedHours.isEmpty());
-    assertEquals("owner_counter", ((TurnOutcome.Again) result).value().lastAction());
+    assertEquals("owner_counter", ((OwnerInteraction.Again) result).value().lastAction());
   }
 
   @Test
   void differentCandidatesCompeteForOneSlot() throws Exception {
     var m = store.snapshot().matches.get("match");
     m.players.put("luz", "left");
-    var guest = new DemoStore.Player();
+    var guest = new DemoSession.Player();
     guest.id = "previously-approved-guest";
     guest.name = "Synthetic guest";
     store.snapshot().players.put(guest.id, guest);
@@ -377,7 +385,7 @@ class InvariantTest {
     var t = state("teo");
     try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
       var calls =
-          List.<Callable<TurnOutcome>>of(
+          List.<Callable<OwnerInteraction>>of(
               () ->
                   port.answer(
                       new AnsweredReview(

@@ -2,12 +2,12 @@ package dev.padelpot.connector;
 
 import dev.padelpot.domain.*;
 
-public interface ApplicationPort {
+public interface PadelOperations {
   ModelInput context(TurnState state);
 
   TurnOutcome apply(ModelTurn turn);
 
-  TurnOutcome answer(AnsweredReview answer);
+  OwnerInteraction answer(AnsweredReview answer);
 
-  Result answerFinal(AnsweredReview answer);
+  OwnerInteraction answerFinal(AnsweredReview answer);
 }
