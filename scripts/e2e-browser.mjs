@@ -8,7 +8,8 @@ const {values: options} = parseArgs({options: {
   base: {type: 'string', default: 'http://127.0.0.1:8080'},
   output: {type: 'string', default: resolve(root, 'output/browser-evidence')},
   'playwright-module': {type: 'string', default: resolve(root, 'output/browser-tools/node_modules/playwright/index.mjs')},
-  'browser-executable': {type: 'string'}
+  'browser-executable': {type: 'string'},
+  'record-video': {type: 'boolean', default: false}
 }});
 const { chromium } = await import(pathToFileURL(resolve(options['playwright-module'])).href);
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -17,8 +18,13 @@ import assert from 'node:assert/strict';
 const base = options.base.replace(/\/$/, '');
 const output = resolve(options.output);
 await mkdir(output, {recursive: true});
-const browser = await chromium.launch({headless: true, executablePath: options['browser-executable']});
-const page = await browser.newPage({viewport: {width:1300,height:1000}, timezoneId:'Europe/Madrid'});
+const recording = options['record-video'];
+const browser = await chromium.launch({headless: true, executablePath: options['browser-executable'], slowMo: recording ? 120 : 0});
+const context = await browser.newContext({viewport: {width:1300,height:1000}, timezoneId:'Europe/Madrid',
+  ...(recording ? {recordVideo: {dir: output, size: {width:1300,height:1000}}} : {})});
+const page = await context.newPage();
+const video = page.video();
+let passed = false;
 const messages=[], checkpoints=[], approved=new Set(), errors=[];
 const names={alba:'Alba Sol',nico:'Nico Rios',luz:'Luz Vega',teo:'Teo Mar'};
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -45,9 +51,13 @@ async function audit() {
 async function select(owner) {
   await page.locator('#owners').getByRole('button',{name:new RegExp(names[owner])}).click();
   await page.waitForFunction(name=>document.querySelector('#owner-name').textContent.startsWith(name),names[owner]);
+  if(recording) await delay(1200);
 }
 async function type(text) {
-  await page.locator('#message').fill(text);
+  if(recording) {
+    await page.locator('#message').pressSequentially(text,{delay:80});
+    await delay(700);
+  } else await page.locator('#message').fill(text);
   await page.locator('#send').click();
 }
 async function pending(owner) {
@@ -70,7 +80,7 @@ async function approve(owner,review,viaText=false) {
   assert.ok(!before?.players[owner]);
   assert.notEqual(before?.status,'CONFIRMED');
   const count=messages.length;
-  await delay(1200);
+  await delay(recording ? 4500 : 1200);
   assert.equal(messages.length,count,'Rendering sent a message without human action');
   assert.deepEqual(await audit(),before,'Waiting changed participation');
   checkpoints.push({ownerId:owner,kind:review.kind,interactionId:review.id,executionId:review.executionId,prompt:review.prompt,beforeApproval:before});
@@ -88,6 +98,7 @@ async function approve(owner,review,viaText=false) {
       assert.equal(sent[0].body.ownerId,owner);
       assert.ok(sent[0].body.choice==='approve'||sent[0].body.text==='approve');
       console.log(owner+': real UI approval committed '+match.teams[owner]+'-'+match.players[owner]);
+      if(recording) await delay(2500);
       return;
     }
     await delay(200);
@@ -101,17 +112,21 @@ try {
   await page.goto(base);
   await page.locator('#suggestions').getByRole('button',{name:'Open Thursday at 19:00',exact:true}).waitFor();
   assert.equal((await api('/view')).matches.length,0);
+  if(recording) await delay(2500);
   await page.locator('#suggestions').getByRole('button',{name:'Open Thursday at 19:00',exact:true}).click();
+  if(recording) await delay(1500);
   await page.locator('#send').click();
   const alba=await pending('alba'); assert.equal(alba.kind,'open'); await approve('alba',alba);
   for(const owner of ['nico','luz','teo']) {
     await select(owner);
     await page.locator('#suggestions').getByRole('button',{name:'Find me a match',exact:true}).click();
+    if(recording) await delay(1500);
     await page.locator('#send').click();
     let review=await pending(owner);
     if(owner==='nico') {
       assert.equal(review.kind,'clarify');
       const before=await audit();
+      if(recording) await delay(4500);
       await type("I'm flexible");
       for(let i=0;i<300;i++) {
         const d=await api('/owners/nico');
@@ -127,7 +142,7 @@ try {
     if(owner==='teo') {
       // Owner switching and delayed rendering must not manufacture the fourth approval.
       const before=await audit();
-      await select('alba'); await delay(1500); await select('teo');
+      await select('alba'); await delay(recording ? 2500 : 1500); await select('teo');
       assert.deepEqual(await audit(),before);
       assert.equal(Object.keys(before.players).length,3);
       assert.equal(before.status,'OPEN');
@@ -149,11 +164,23 @@ try {
   for(const owner of Object.keys(names)) conversations[owner]=await api('/owners/'+owner);
   await select('alba');
   await page.waitForFunction(()=>document.querySelector('.match-card .status')?.textContent.includes('confirmed'));
+  if(recording) await delay(6000);
   await page.screenshot({path:output+'/padelpot-real-gemma.jpg',type:'jpeg',quality:90,fullPage:true});
   await writeFile(output+'/browser-evidence.json',JSON.stringify({result:'PASS',provider:developer.provider,match,checkpoints,channelMessages:messages,conversations,businessEvents:developer.events,errors},null,2));
+  passed = true;
   console.log('PASS: real Gemma through actual web chat; four roots, five correlated replies, four explicit approvals, two valid teams.');
 } catch(error) {
   await page.screenshot({path:output+'/failure.png',fullPage:true}).catch(()=>{});
   await writeFile(output+'/browser-failure.json',JSON.stringify({result:'FAIL',error:String(error),messages,checkpoints,view:await api('/view').catch(()=>null),developer:await api('/developer').catch(()=>null)},null,2));
   throw error;
-} finally {await browser.close();}
+} finally {
+  await context.close();
+  try {
+    if(video) {
+      const destination=resolve(output, passed ? 'padelpot-happy-path.webm' : 'failed-run.webm');
+      await video.saveAs(destination);
+      await video.delete();
+      console.log('Screen recording: '+destination);
+    }
+  } finally {await browser.close();}
+}

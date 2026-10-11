@@ -63,6 +63,8 @@ node scripts/e2e-browser.mjs
 
 This uses the chat suggestions, typed replies and approval buttons. It delays each approval, switches owners while Teo is waiting and checks that these actions cannot sign anyone up. It requires Gemma 4/OpenRouter and never switches to fixtures or retries a failed scenario. Use `--base http://127.0.0.1:18081` for an isolated server. Recordings and the screenshot go to `output/browser-evidence`; use `--output` to retain separate runs.
 
+Add `--record-video` to save `padelpot-happy-path.webm` from the actual browser viewport, with pauses so the questions and approvals are readable. Failed runs are saved as `failed-run.webm`. Video and evidence remain local and excluded from Git.
+
 Native TPF replay is written to `output/tpf-replay`. The evidence runner exports `output/evidence/demo-execution-dataset.json`, unchanged native documents and root groupings. The tested TPF runtime exports execution **segments** and a shared Await control document, so native file count equals roots + human resumes + one control document. Native events/topology are preserved; the runner asserts both that count and the native Await root IDs.
 
 Generated state, recordings and evidence are local files excluded from Git. See [scenario instructions](docs/scenarios.md).
