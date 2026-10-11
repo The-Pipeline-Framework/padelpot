@@ -1,5 +1,7 @@
 # Reproducible scenarios
 
+Latest real-provider evidence: [Gemma/OpenRouter verification, 11 October 2026](live-verification.md). It records the failed 26.9.4 browser runs, the published runtime fix, successful web-chat and complete API flows on 26.10.1-SNAPSHOT, and all 52 passing regression tests. The earlier results below describe their own implementation stages.
+
 | Scenario | Stimulus and expected invariant | Verification |
 |---|---|---|
 | A · successful negotiation | Alba opens with one approved player, three candidates independently negotiate, four owners explicitly approve; two teams, each with exactly one left and one right place | `scripts/e2e.py`, actual Gemma |

@@ -2,6 +2,8 @@
 
 These rules amend the PadelPot demo requirements. They apply to discovery, agent negotiation, human review, commitment, saved matches and the chat simulator.
 
+The latest [real Gemma verification](live-verification.md) confirms the two-team and four-approval flow through the web chat and API on the fixed TPF snapshot. The original amendment test results below remain scoped to their earlier implementation stage.
+
 ## Doubles and court positions
 
 A doubles match has **two teams of two players**. Each team has one left-side place and one right-side place, from that team's perspective facing the opponents. These are court positions, not a player's dominant hand.

@@ -82,6 +82,83 @@ class InvariantTest {
   }
 
   @Test
+  void discoveryAsksForFixedMatchTimePermissionBeforeAnyPeerNegotiation() {
+    var base = state("nico");
+    store.snapshot().intents.clear();
+    var chat =
+        PadelApplication.copy(
+            base,
+            "nico",
+            "chat",
+            "",
+            0,
+            base.ownerVersion(),
+            0,
+            19,
+            "competitive",
+            "right",
+            "",
+            List.of(),
+            "Find me a competitive match this Thursday after work.");
+    var review =
+        assertInstanceOf(
+                TurnOutcome.ReviewRequired.class,
+                port.apply(
+                    new ModelTurn(chat, new AgentDecision("find", 0, "", "", "", "", "Find"))))
+            .value();
+    assertEquals("clarify", review.kind());
+    assertEquals("hour", review.field());
+    assertEquals("19", review.value());
+    assertEquals("match", review.state().matchId());
+    assertTrue(store.snapshot().events.stream().noneMatch(e -> e.type().equals("AGENT_MESSAGE")));
+    assertEquals(1, store.snapshot().matches.get("match").players.size());
+    var resumed =
+        assertInstanceOf(
+                OwnerInteraction.Again.class,
+                port.answer(new OwnerProjector().fromText(review, "I'm flexible", "nico")))
+            .value();
+    assertEquals(chat.requestId(), resumed.requestId());
+    assertEquals(chat.deadline(), resumed.deadline());
+    assertFalse(
+        PadelApplication.requiresTimePermission(
+            store.player("nico"), 19, store.snapshot().intents.get(chat.requestId())));
+    assertEquals("20", store.player("nico").value("preferredHour"));
+    assertEquals("ask", store.player("nico").value("timeFlexibility"));
+    assertEquals(1, store.snapshot().matches.get("match").players.size());
+  }
+
+  @Test
+  void discoveryCannotAskPermissionToOverrideAHardTimeBoundary() {
+    var base = state("nico");
+    store.snapshot().intents.clear();
+    store.player("nico").facts.get("timeFlexibility").value = "no";
+    var chat =
+        PadelApplication.copy(
+            base,
+            "nico",
+            "chat",
+            "",
+            0,
+            base.ownerVersion(),
+            0,
+            19,
+            "competitive",
+            "right",
+            "",
+            List.of(),
+            "Find me a competitive match.");
+    assertEquals(
+        "HARD_CONSTRAINT",
+        result(
+                port.apply(
+                    new ModelTurn(chat, new AgentDecision("find", 0, "", "", "", "", "Find"))))
+            .status());
+    assertTrue(
+        store.snapshot().events.stream().noneMatch(e -> e.type().equals("HUMAN_CHECKPOINT")));
+    assertEquals(1, store.snapshot().matches.get("match").players.size());
+  }
+
+  @Test
   void chatQuestionsRetainTheOwnerRequestWithoutGrantingAuthority() {
     var base = state("luz");
     var chat =

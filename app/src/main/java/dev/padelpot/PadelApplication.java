@@ -549,7 +549,7 @@ public class PadelApplication implements PadelOperations {
                 + " match at "
                 + m.hour
                 + ":00. I'll negotiate within your boundaries. You will approve before joining.");
-        yield again(
+        TurnState found =
             copy(
                 s,
                 p.id,
@@ -563,7 +563,26 @@ public class PadelApplication implements PadelOperations {
                 Doubles.preferredSide(p),
                 "",
                 List.of(),
-                s.ownerText()));
+                s.ownerText());
+        if (!available(p, m.hour)
+            || (requiresTimePermission(p, m.hour, intent)
+                && p.value("timeFlexibility").equals("no")))
+          yield done(
+              found, "HARD_CONSTRAINT", "This fixed match violates your hard time boundary.");
+        if (requiresTimePermission(p, m.hour, intent))
+          yield review(
+              found,
+              "clarify",
+              "You prefer "
+                  + p.value("preferredHour")
+                  + ":00. May I negotiate "
+                  + m.hour
+                  + ":00 for match "
+                  + matchLabel(m.id)
+                  + "? This only permits negotiation; participation still needs your approval.",
+              "hour",
+              String.valueOf(m.hour));
+        yield again(found);
       }
       case "persona_update", "learn" -> {
         if (d.action().equals("learn")
