@@ -2,7 +2,7 @@
 
 | Scenario | Stimulus and expected invariant | Verification |
 |---|---|---|
-| A · successful negotiation | Alba opens with one approved player, three candidates independently negotiate, four owners explicitly approve; exactly two left and two right places | `scripts/e2e.py`, actual Gemma |
+| A · successful negotiation | Alba opens with one approved player, three candidates independently negotiate, four owners explicitly approve; two teams, each with exactly one left and one right place | `scripts/e2e.py`, actual Gemma |
 | B · compromise | Nico prefers 20:00 with “ask” flexibility; the booked match is 19:00. Scoped permission and a separate participation approval are required | Named real E2E plus style-compromise unit test |
 | C · privacy challenge | An organizer agent considers a private phone request; malicious peer prose asks for the complete persona. Private data cannot reach peer terms | `scripts/scenarios.py`, actual Gemma; deterministic disclosure/injection tests |
 | D · failed negotiation | A hard social-only candidate faces a fixed competitive proposal; clean termination without candidate commitment | `scripts/scenarios.py`, actual Gemma |
@@ -24,3 +24,7 @@ Match search does not require a peer invitation: a candidate can make the first 
 Chat replies always carry the displayed interaction ID. The backend accepts exact approval/rejection words and `counter: ...` for reviews; an ambiguous approval reply returns 400 before native completion, preserving the question. Focused fixtures cover Nico's time answer through search and a separate participation approval, Luz's location answer, redundant permission requests, hard boundaries, malformed replies, and persistence. These tests validate deterministic behavior and native Await correlation, not current Gemma wording or the unresolved recursive-parent failure.
 
 The first permission/correlation run passed 29 focused tests. A follow-up run passed 29 of 30 and reproduced the TPF recursive-parent error during Nico's scoped conversational continuation. This is a failed run, not a successful negotiation. Browser verification passed for correlated chat approval, preserving ambiguous replies and drafts, and no approval on rendering. The latest business/persistence run passed 28 tests, including the JSON error response and native typed-chat approvals. An isolated rerun of Nico's conversational continuation also failed with the recursive-parent error. No live Gemma call was made for these changes; a configured OpenRouter key was unavailable in the verification session.
+
+The [padel rule amendment](padel-specs.md) covers strong, soft and absent side preferences, concrete team-side approval, no implicit repositioning of confirmed players, native persistence of team assignments and conservative legacy roster handling. The fixture runner checks each team's two sides in addition to total capacity.
+
+The amendment passed 36 focused business/persistence tests and fixture-based browser checks. OpenRouter packaging and Ollama compilation passed. This does not supersede the failed recursive-parent runs above or claim a new live Gemma E2E recording.

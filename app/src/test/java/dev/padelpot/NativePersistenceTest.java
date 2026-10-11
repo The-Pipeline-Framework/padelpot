@@ -16,6 +16,33 @@ class NativePersistenceTest {
   @Inject org.pipelineframework.PipelineExecutionService pipeline;
 
   @Test
+  void malformedSavedDoublesCannotBeShownAsConfirmedOrSimulated() {
+    session.reset(false);
+    var match = new DemoSession.Match();
+    match.id = "malformed-doubles";
+    match.organizer = "alba";
+    match.status = "CONFIRMED";
+    match.players.putAll(Map.of("alba", "left", "nico", "right", "luz", "right", "teo", "right"));
+    session.snapshot().matches.put(match.id, match);
+    given()
+        .get("/api/view")
+        .then()
+        .statusCode(200)
+        .body("matches[0].status", org.hamcrest.Matchers.equalTo("INVALID_ROSTER"))
+        .body("matches[0].rosterValid", org.hamcrest.Matchers.equalTo(false));
+    given()
+        .contentType("application/json")
+        .body(Map.of("ownerId", "alba"))
+        .post("/api/matches/" + match.id + "/simulate")
+        .then()
+        .statusCode(409);
+    assertFalse(match.played);
+    assertEquals(4, match.players.size());
+    assertEquals("right", match.players.get("luz"));
+    assertTrue(session.snapshot().events.stream().noneMatch(e -> e.type().equals("ROOT_STARTED")));
+  }
+
+  @Test
   void onlyApprovedOwnerAggregateIsPersistedAndReloaded() throws Exception {
     session.reset(true);
     String execution =
@@ -168,6 +195,8 @@ class NativePersistenceTest {
     assertEquals("CONFIRMED", result.status());
     assertEquals("nico", aggregates.matches().getFirst().change().ownerId());
     assertEquals(2, aggregates.matches().getFirst().players().size());
+    assertTrue(
+        aggregates.matches().getFirst().players().stream().allMatch(p -> p.team().equals("A")));
     session.load();
     assertEquals(2, session.snapshot().matches.get(match.id).players.size());
     assertTrue(
@@ -177,6 +206,7 @@ class NativePersistenceTest {
                     m.text().contains("recorded before this chat session")
                         && m.text().contains(DemoSession.matchLabel(match.id))));
     assertTrue(session.snapshot().matches.get(match.id).restoredPlayers.contains("nico"));
+    assertEquals(Map.of("alba", "A", "nico", "A"), session.snapshot().matches.get(match.id).teams);
     given().get("/api/owners/nico").then().statusCode(200);
   }
 

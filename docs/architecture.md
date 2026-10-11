@@ -45,7 +45,7 @@ sequenceDiagram
         Gemma-->>TPF: Structured AgentDecision
         TPF->>TPF: ValidateTurn with trusted TurnState
         TPF->>App: turn.apply Command
-        App->>App: Check disclosure, constraints, expiry and turn limit
+        App->>App: Check disclosure, side boundaries, vacancies, expiry and turn limit
         App-->>TPF: Again, Review or Result
         Note over TPF,App: Again continues within the same root.<br/>Review returns to the root.
     end
@@ -55,7 +55,7 @@ sequenceDiagram
         Owner->>Channel: Poll private conversation
         Channel->>TPF: Query pending interactions
         TPF-->>Channel: Review and interaction ID
-        Channel-->>Owner: Clarification or participation approval
+        Channel-->>Owner: Clarification or concrete team-side approval
         Owner->>Channel: Correlated explicit choice
         Channel->>Channel: Validate owner and construct AnsweredReview
         Channel->>TPF: completeAwaitInteraction (same root)
@@ -64,7 +64,7 @@ sequenceDiagram
             App-->>TPF: Again with the owner response
             Note over TPF,Gemma: Repeat bounded nested negotiation.<br/>RequestFinalReview awaits the final owner choice.<br/>human.final rechecks authority and capacity in the same root.
         else Participation approval
-            App->>App: Check owner, expiry, versions, blocks and capacity
+            App->>App: Check owner, expiry, versions, blocks and exact team-side vacancy
             App->>Session: Apply valid participation to working copy
             App-->>TPF: MatchChanged with canonical Match
             TPF->>Persistence: Observe Match before acknowledgement
@@ -87,6 +87,8 @@ sequenceDiagram
 The application owns persona meaning, disclosure policy, aggregate versions and commitment authority. TPF owns persistence execution. Approved persona changes emit a canonical `Owner` branch; approved participation emits `Match`. The YAML configures native persistence before the matching acknowledgement operations, using `mappings.persistence` to adapt canonical records to typed JPA representations. Generated persistence observers invoke TPF's released `PersistenceService` and `VThreadPersistenceProvider`. No business step calls a save method, and no application JSON writer or custom persistence provider remains.
 
 `DemoSession` holds mutable working copies, bounded chat/event history and temporary intents in one process. Short synchronized policy sections protect the organizer's capacity, uniqueness and version checks. Native admission, inference and Await completion run outside those locks. Await uses TPF's default execution-scoped identity. The removed `state.requestId` override was incorrect: 26.9.4 reads top-level field names and treated that dotted path as null, allowing reviews of the same kind to collide across roots. Concurrent requests are accepted; the provider's separate semaphore permits one model call at a time. `pipeline.parallelism=SEQUENTIAL` processes each root sequentially; independent roots still overlap. Every authored step is ONE_TO_ONE, so there is no item fan-out to parallelize. `pipeline.max-concurrency` controls item parallelism, not global root admission. `PadelOperations` is a typed application connector contract, rather than a generic port or repository.
+
+Padel authority follows the [padel rules](padel-specs.md): four named places (A-left, A-right, B-left, B-right), and either, soft or strong court-side preferences. Trusted `TurnState` carries the concrete team and side into the approval. `Participation` preserves them in the approved match. Only candidate side preferences govern an offer, even when the organizer proposes it.
 
 H2 runs inside the application and stores approved aggregate versions. Each aggregate version includes the authorized change receipt (owner, request, status and message), so acknowledgement preserves the approving owner after persistence. These business receipts are never included in peer terms or model context. The JPA representation uses an immutable business ID/version identity: a delayed older write cannot overwrite a newer version. Restart queries load the greatest stored version. Owner deletion explicitly removes that owner's stored revisions and emits the corrected `Owner` through the same native persistence boundary. The database has no encryption or production recovery claim.
 
@@ -141,6 +143,7 @@ classDiagram
     class Participation {
         String ownerId
         String side
+        String team
     }
     class PlayObservation {
         List~Owner~ owners

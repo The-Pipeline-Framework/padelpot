@@ -22,6 +22,7 @@ public class MatchMapper implements Mapper<Match, MatchEntity> {
     entity.cancelled = match.cancelled();
     entity.played = match.played();
     match.players().forEach(p -> entity.players.put(p.ownerId(), p.side()));
+    match.players().forEach(p -> entity.teams.put(p.ownerId(), p.team()));
     return entity;
   }
 
@@ -37,7 +38,10 @@ public class MatchMapper implements Mapper<Match, MatchEntity> {
         entity.hour,
         entity.matchVersion,
         entity.players.entrySet().stream()
-            .map(e -> new Participation(e.getKey(), e.getValue()))
+            .map(
+                e ->
+                    new Participation(
+                        e.getKey(), e.getValue(), entity.teams.getOrDefault(e.getKey(), "")))
             .toList(),
         entity.cancelled,
         entity.played,

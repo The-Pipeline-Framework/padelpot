@@ -35,7 +35,7 @@ public final class Policy {
       case "availability" -> Set.of("19", "20", "19,20").contains(v);
       case "preferredHour" -> Set.of("19", "20").contains(v);
       case "style" -> Set.of("social", "competitive").contains(v);
-      case "side" -> Set.of("left", "right", "either").contains(v);
+      case "side" -> Set.of("left", "right", "either", "strong_left", "strong_right").contains(v);
       case "timeFlexibility", "styleFlexibility" -> Set.of("yes", "ask", "no").contains(v);
       default -> false;
     };

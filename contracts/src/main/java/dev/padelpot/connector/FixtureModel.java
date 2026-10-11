@@ -60,9 +60,11 @@ public class FixtureModel extends LlmQueryConnectorProvider {
                             : "propose";
                     String brief = n.path("playerBrief").asText();
                     side =
-                        brief.contains("side=left")
+                        (brief.contains("side=left") || brief.contains("side=strong_left"))
                             ? "left"
-                            : brief.contains("side=right") ? "right" : "either";
+                            : (brief.contains("side=right") || brief.contains("side=strong_right"))
+                                ? "right"
+                                : "either";
                     if (task.contains("as organizer")) {
                       String terms = n.path("publicTerms").asText();
                       side = terms.substring(terms.indexOf("side=") + 5).split(";")[0];

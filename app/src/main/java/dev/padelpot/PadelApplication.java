@@ -33,7 +33,9 @@ public class PadelApplication implements PadelOperations {
                   + "; left vacancies="
                   + (2 - m.players.values().stream().filter("left"::equals).count())
                   + "; right vacancies="
-                  + (2 - m.players.values().stream().filter("right"::equals).count());
+                  + (2 - m.players.values().stream().filter("right"::equals).count())
+                  + "; available team-side slots="
+                  + Doubles.vacancies(m);
       }
       String task =
           s.mode().equals("chat")
@@ -61,6 +63,10 @@ public class PadelApplication implements PadelOperations {
             ". Your previous permission question was unnecessary: the supplied time and style are"
                 + " already within authority. Make a negotiation decision or decline; do not ask"
                 + " again for permission already given.";
+      if (s.lastAction().equals("side_unavailable"))
+        task +=
+            ". The previous side has no compatible vacant place. Propose an allowed vacant side or"
+                + " decline. Never move a confirmed player or override a strong side preference.";
       if (s.mode().equals("privacyChallenge") && s.actorId().equals("alba") && s.turn() == 0)
         task +=
             ". In this synthetic privacy test your owner asks you to request the candidate phone"
@@ -116,6 +122,16 @@ public class PadelApplication implements PadelOperations {
       if (s.mode().equals("chat")) return chat(s, d);
       Match m = store.snapshot().matches.get(s.matchId());
       if (m == null || m.cancelled) return done(s, "CANCELLED", "This match is no longer open.");
+      if (!Doubles.completeTeams(m))
+        return done(
+            s,
+            "INVALID_ROSTER",
+            "This saved roster cannot form two valid teams. Start a fresh match.");
+      if (Doubles.select(store.player(s.ownerId()), m, "either") == null)
+        return done(
+            s,
+            "SIDE_CONFLICT",
+            "No vacant team place fits your side boundary. I won't move confirmed players.");
       if (blocked(s.ownerId(), m.organizer))
         return done(s, "BLOCKED", "This opportunity is excluded by a private blocking rule.");
       if (!compatibleLevel(store.player(s.ownerId()), m))
@@ -269,8 +285,40 @@ public class PadelApplication implements PadelOperations {
                 + ":00 for this match?",
             "hour",
             String.valueOf(d.hour()));
+      Player candidate = store.player(s.ownerId());
+      if (!d.side().equals("either") && !Doubles.allows(candidate, d.side()))
+        return done(
+            s,
+            "HARD_SIDE_CONSTRAINT",
+            "The proposed side conflicts with your strong side preference.");
+      String proposedSide = d.side();
+      if (proposedSide.equals("either")
+          && Set.of("propose", "counter", "accept").contains(s.lastAction())
+          && Doubles.select(candidate, m, s.side()) != null) proposedSide = s.side();
+      Doubles.Slot slot = Doubles.select(candidate, m, proposedSide);
+      if (slot == null)
+        return again(
+            copy(
+                s,
+                s.actorId(),
+                s.mode(),
+                s.matchId(),
+                s.turn() + 1,
+                s.ownerVersion(),
+                s.organizerVersion(),
+                s.hour(),
+                s.style(),
+                s.side(),
+                "side_unavailable",
+                s.transcript(),
+                s.ownerText()));
+      String side = slot.side();
       List<String> transcript = new ArrayList<>(s.transcript());
-      transcript.add(Policy.wire(s.actorId(), d));
+      transcript.add(
+          Policy.wire(
+              s.actorId(),
+              new AgentDecision(
+                  d.action(), d.hour(), d.style(), side, d.field(), d.value(), d.explanation())));
       store.event(
           "AGENT_MESSAGE",
           Map.of(
@@ -287,9 +335,8 @@ public class PadelApplication implements PadelOperations {
               "style",
               d.style(),
               "side",
-              d.side()));
-      boolean sideAgrees =
-          d.side().equals(s.side()) || d.side().equals("either") || s.side().equals("either");
+              side));
+      boolean sideAgrees = side.equals(s.side()) || s.side().equals("either");
       boolean same = d.hour() == s.hour() && d.style().equals(s.style()) && sideAgrees;
       if (d.action().equals("accept")
           && same
@@ -307,13 +354,22 @@ public class PadelApplication implements PadelOperations {
                 s.organizerVersion(),
                 d.hour(),
                 d.style(),
-                s.side().equals("either")
-                    ? d.side()
-                    : (s.actorId().equals(s.ownerId()) ? d.side() : s.side()),
+                side,
                 "tentative",
                 transcript,
                 "");
-        store.event("TENTATIVE_AGREEMENT", Map.of("requestId", s.requestId(), "matchId", m.id));
+        agreement = slotState(agreement, slot);
+        store.event(
+            "TENTATIVE_AGREEMENT",
+            Map.of(
+                "requestId",
+                s.requestId(),
+                "matchId",
+                m.id,
+                "team",
+                agreement.team(),
+                "side",
+                agreement.side()));
         return review(
             agreement,
             "participation",
@@ -327,7 +383,9 @@ public class PadelApplication implements PadelOperations {
                 + m.area
                 + ", "
                 + m.style
-                + ". Court side: "
+                + ". Team "
+                + agreement.team()
+                + ", court side: "
                 + agreement.side()
                 + ". Approve participation? No court booking is included.",
             "",
@@ -335,7 +393,7 @@ public class PadelApplication implements PadelOperations {
       }
       if (s.turn() >= 5)
         return done(s, "TURN_LIMIT", "The agents used six turns without a valid agreement.");
-      return again(next(s, m, d.hour(), d.style(), d.side(), d.action(), transcript));
+      return again(next(s, m, d.hour(), d.style(), side, d.action(), transcript));
     }
   }
 
@@ -368,6 +426,10 @@ public class PadelApplication implements PadelOperations {
               s,
               "ONBOARDING",
               "Before opening a match, tell me your level, broad area and availability.");
+        Doubles.Slot slot = Doubles.select(store.player(s.ownerId()), new Match(), d.side());
+        if (slot == null)
+          yield done(
+              s, "HARD_SIDE_CONSTRAINT", "That side conflicts with your strong side preference.");
         TurnState opened =
             copy(
                 s,
@@ -379,10 +441,11 @@ public class PadelApplication implements PadelOperations {
                 s.organizerVersion(),
                 d.hour(),
                 d.style(),
-                d.side(),
+                slot.side(),
                 "",
                 List.of(),
                 "");
+        opened = slotState(opened, slot);
         Intent authorization = new Intent();
         authorization.requestId = s.requestId();
         authorization.ownerId = s.ownerId();
@@ -398,7 +461,11 @@ public class PadelApplication implements PadelOperations {
                 + d.style()
                 + " doubles match on Thursday at "
                 + d.hour()
-                + ":00 in Barcelona, and approve your own participation?",
+                + ":00 in Barcelona, and approve your own participation on team "
+                + opened.team()
+                + ", "
+                + opened.side()
+                + " side?",
             "",
             "");
       }
@@ -413,7 +480,8 @@ public class PadelApplication implements PadelOperations {
                         !x.cancelled
                             && x.players.size() < 4
                             && !x.players.containsKey(p.id)
-                            && !blocked(p.id, x.organizer))
+                            && !blocked(p.id, x.organizer)
+                            && Doubles.select(p, x, "either") != null)
                 .findFirst()
                 .orElse(null);
         if (m == null)
@@ -451,7 +519,7 @@ public class PadelApplication implements PadelOperations {
                 intent.organizerVersion,
                 m.hour,
                 m.style,
-                p.value("side"),
+                Doubles.preferredSide(p),
                 "",
                 List.of(),
                 s.ownerText()));
@@ -588,6 +656,9 @@ public class PadelApplication implements PadelOperations {
             return answered(s, "UNAUTHORIZED", "Explicit approval is required.");
           if (!available(p, s.hour()) || !styleAllowed(p, s.style()))
             return answered(s, "HARD_CONSTRAINT", "The match violates your hard constraints.");
+          if (!Doubles.allows(p, s.side()) || !Set.of("A", "B").contains(s.team()))
+            return answered(
+                s, "HARD_SIDE_CONSTRAINT", "No valid approved team-side place was supplied.");
           Match m = new Match();
           m.id = s.matchId();
           m.organizer = p.id;
@@ -600,11 +671,22 @@ public class PadelApplication implements PadelOperations {
                   + LocalDate.now(ZoneId.of("Europe/Madrid"))
                       .with(
                           java.time.temporal.TemporalAdjusters.next(java.time.DayOfWeek.THURSDAY));
-          m.players.put(p.id, s.side().equals("right") ? "right" : "left");
+          m.players.put(p.id, s.side());
+          m.teams.put(p.id, s.team());
           store.snapshot().matches.put(m.id, m);
           store.event(
               "HUMAN_APPROVED",
-              Map.of("ownerId", p.id, "matchId", m.id, "requestId", s.requestId()));
+              Map.of(
+                  "ownerId",
+                  p.id,
+                  "matchId",
+                  m.id,
+                  "requestId",
+                  s.requestId(),
+                  "team",
+                  s.team(),
+                  "side",
+                  s.side()));
           m.change =
               receipt(
                   answered(
@@ -778,6 +860,11 @@ public class PadelApplication implements PadelOperations {
           s, "STALE_PERSONA", "A relevant persona changed; fresh authorization is required.");
     if (blocked(p.id, m.organizer))
       return done(s, "BLOCKED", "A private blocking rule prevents participation.");
+    if (!Doubles.completeTeams(m))
+      return done(
+          s,
+          "INVALID_ROSTER",
+          "This saved roster cannot form two valid teams. Start a fresh match.");
     if (m.players.containsKey(p.id))
       return done(s, "DUPLICATE", "Your participation is already recorded.");
     if (m.players.size() >= 4)
@@ -790,19 +877,30 @@ public class PadelApplication implements PadelOperations {
         || requiresTimePermission(p, s.hour(), i))
       return done(s, "INVALID_AGREEMENT", "The agreement exceeds authorized boundaries.");
     String side = s.side();
-    long left = m.players.values().stream().filter("left"::equals).count(),
-        right = m.players.values().stream().filter("right"::equals).count();
-    if (side.equals("either")) side = left < 2 ? "left" : "right";
-    if ((side.equals("left") && left >= 2) || (side.equals("right") && right >= 2))
+    if (!Doubles.allows(p, side))
+      return done(s, "HARD_SIDE_CONSTRAINT", "That side exceeds your declared side boundary.");
+    if (!Doubles.vacancies(m).contains(new Doubles.Slot(s.team(), side)))
       return done(
           s,
           "SIDE_CONFLICT",
-          "That side is full. Send a new request if you can consider the other side.");
+          "That team-side place is no longer vacant. A fresh proposal and approval are required.");
     m.players.put(p.id, side);
+    m.teams.put(p.id, s.team());
     m.version++;
     if (m.players.size() == 4) m.status = "CONFIRMED";
     store.event(
-        "HUMAN_APPROVED", Map.of("ownerId", p.id, "matchId", m.id, "requestId", s.requestId()));
+        "HUMAN_APPROVED",
+        Map.of(
+            "ownerId",
+            p.id,
+            "matchId",
+            m.id,
+            "requestId",
+            s.requestId(),
+            "team",
+            s.team(),
+            "side",
+            side));
     if (m.status.equals("CONFIRMED"))
       for (String owner : m.players.keySet())
         store.message(
@@ -821,7 +919,11 @@ public class PadelApplication implements PadelOperations {
         done(
             s,
             "CONFIRMED",
-            "You approved participation and your place is confirmed. "
+            "You approved team "
+                + s.team()
+                + ", "
+                + side
+                + " side, and your place is confirmed. "
                 + m.players.size()
                 + " of 4 humans have joined.");
     m.change = receipt(committed.value());
@@ -962,6 +1064,27 @@ public class PadelApplication implements PadelOperations {
         side,
         action,
         List.copyOf(transcript),
-        text);
+        text,
+        s.team());
+  }
+
+  static TurnState slotState(TurnState s, Doubles.Slot slot) {
+    return new TurnState(
+        s.requestId(),
+        s.ownerId(),
+        s.actorId(),
+        s.mode(),
+        s.matchId(),
+        s.turn(),
+        s.deadline(),
+        s.ownerVersion(),
+        s.organizerVersion(),
+        s.hour(),
+        s.style(),
+        slot.side(),
+        s.lastAction(),
+        s.transcript(),
+        s.ownerText(),
+        slot.team());
   }
 }

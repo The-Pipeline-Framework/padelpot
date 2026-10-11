@@ -294,6 +294,19 @@
         },
         "nullMarkerNumber" : null,
         "nullMarkerProtoName" : null
+      }, {
+        "number" : 3,
+        "name" : "team",
+        "protoName" : "team",
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
       } ],
       "target" : null,
       "variants" : [ ],
@@ -666,6 +679,19 @@
         "number" : 13,
         "name" : "style",
         "protoName" : "style",
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
+      }, {
+        "number" : 16,
+        "name" : "team",
+        "protoName" : "team",
         "type" : "string",
         "presence" : "REQUIRED",
         "nullability" : "NON_NULL",

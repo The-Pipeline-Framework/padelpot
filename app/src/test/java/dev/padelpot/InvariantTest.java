@@ -43,6 +43,7 @@ class InvariantTest {
     i.organizerVersion = store.player("alba").version;
     i.permittedHours.add(19);
     store.snapshot().intents.put(i.requestId, i);
+    var slot = Doubles.select(p, store.snapshot().matches.get("match"), "either");
     return new TurnState(
         i.requestId,
         owner,
@@ -55,10 +56,11 @@ class InvariantTest {
         i.organizerVersion,
         19,
         "competitive",
-        p.value("side"),
+        slot == null ? Doubles.preferredSide(p) : slot.side(),
         "propose",
         List.of("alba propose hour=19 style=competitive side=left"),
-        "");
+        "",
+        slot == null ? "A" : slot.team());
   }
 
   Result result(TurnOutcome o) {
@@ -168,7 +170,8 @@ class InvariantTest {
             "left",
             "",
             List.of(),
-            "Find a match");
+            "Find a match",
+            "");
     assertEquals(
         "EXPIRED",
         result(
@@ -349,6 +352,7 @@ class InvariantTest {
             s.side(),
             s.lastAction(),
             s.transcript(),
+            "",
             "");
     assertEquals(
         "EXPIRED",
@@ -380,7 +384,8 @@ class InvariantTest {
             "left",
             "",
             List.of(),
-            "Feedback: friendly games were enjoyable");
+            "Feedback: friendly games were enjoyable",
+            "");
     var o =
         port.apply(
             new ModelTurn(
@@ -417,6 +422,7 @@ class InvariantTest {
             "right",
             "",
             List.of(),
+            "",
             "");
     assertEquals("TURN_LIMIT", result(port.apply(new ModelTurn(end, malformed))).status());
   }
@@ -448,6 +454,7 @@ class InvariantTest {
             "right",
             "propose",
             List.of(),
+            "",
             "");
     port.apply(
         new ModelTurn(

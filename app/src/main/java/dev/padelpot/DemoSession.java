@@ -50,6 +50,7 @@ public class DemoSession {
         new dev.padelpot.domain.ChangeReceipt("fixture", "", "FIXTURE", "Synthetic state");
     public long version = 1;
     public Map<String, String> players = new LinkedHashMap<>();
+    public Map<String, String> teams = new LinkedHashMap<>();
     public Set<String> restoredPlayers = new HashSet<>();
     public boolean cancelled, played;
   }
@@ -109,6 +110,10 @@ public class DemoSession {
       m.played = match.played();
       m.change = match.change();
       match.players().forEach(p -> m.players.put(p.ownerId(), p.side()));
+      match.players().stream()
+          .filter(p -> !p.team().isBlank())
+          .forEach(p -> m.teams.put(p.ownerId(), p.team()));
+      if (!Doubles.completeTeams(m)) event("INVALID_RESTORED_ROSTER", Map.of("matchId", m.id));
       m.restoredPlayers.addAll(m.players.keySet());
       db.matches.put(m.id, m);
       for (String owner : m.players.keySet())
@@ -126,7 +131,7 @@ public class DemoSession {
                 + ", "
                 + m.style
                 + ". This place was recorded before this chat session. Match status: "
-                + m.status.toLowerCase()
+                + (Doubles.valid(m) ? m.status : "INVALID_ROSTER").toLowerCase()
                 + ".");
     }
   }
@@ -157,7 +162,7 @@ public class DemoSession {
         fact(p, "availability", "19,20");
         fact(p, "preferredHour", i == 1 ? "20" : "19");
         fact(p, "style", "competitive");
-        fact(p, "side", i == 0 || i == 2 ? "left" : i == 1 ? "right" : "either");
+        fact(p, "side", i == 0 ? "strong_left" : i == 2 ? "left" : i == 1 ? "right" : "either");
         fact(p, "timeFlexibility", i == 1 ? "ask" : "yes");
         fact(p, "styleFlexibility", "ask");
       }
@@ -218,6 +223,7 @@ public class DemoSession {
 
   public dev.padelpot.domain.Match matchValue(String id) {
     var m = db.matches.get(id);
+    Doubles.completeTeams(m);
     return new dev.padelpot.domain.Match(
         m.id,
         m.organizer,
@@ -229,7 +235,10 @@ public class DemoSession {
         m.hour,
         m.version,
         m.players.entrySet().stream()
-            .map(e -> new dev.padelpot.domain.Participation(e.getKey(), e.getValue()))
+            .map(
+                e ->
+                    new dev.padelpot.domain.Participation(
+                        e.getKey(), e.getValue(), m.teams.getOrDefault(e.getKey(), "")))
             .toList(),
         m.cancelled,
         m.played,
@@ -247,8 +256,10 @@ public class DemoSession {
       int hour,
       long version,
       Map<String, String> players,
+      Map<String, String> teams,
       boolean cancelled,
-      boolean played) {}
+      boolean played,
+      boolean rosterValid) {}
 
   public Map<String, Map<String, String>> personaView(String id) {
     var view = new LinkedHashMap<String, Map<String, String>>();
@@ -311,12 +322,14 @@ public class DemoSession {
                         m.area,
                         m.date,
                         m.level,
-                        m.status,
+                        Doubles.valid(m) ? m.status : "INVALID_ROSTER",
                         m.hour,
                         m.version,
                         Collections.unmodifiableMap(new LinkedHashMap<>(m.players)),
+                        Collections.unmodifiableMap(new LinkedHashMap<>(m.teams)),
                         m.cancelled,
-                        m.played))
+                        m.played,
+                        Doubles.valid(m)))
             .toList());
   }
 }

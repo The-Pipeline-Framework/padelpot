@@ -32,7 +32,7 @@ types:
         type: dev.padelpot.persistence.OwnerEntity
         mapper: dev.padelpot.persistence.OwnerMapper
   Participation:
-    fields: [[ownerId, string], [side, string]]
+    fields: [[ownerId, string], [side, string], [team, string]]
   Match:
     fields:
       - [id, string]
@@ -70,6 +70,7 @@ types:
       - [lastAction, string]
       - { name: transcript, repeated: string }
       - [ownerText, string]
+      - [team, string]
   ModelInput:
     java: dev.padelpot.domain.ModelInput
     fields:
@@ -179,6 +180,9 @@ pipelines:
             This demo supports Barcelona districts, beginner/intermediate/advanced levels, hours 19 and 20,
             competitive/social styles, left/right/either sides, and yes/ask/no flexibility.
             Onboarding: extract ONE declared field per owner message, then propose persona_update for review.
+            For side declarations, use either, left, right, strong_left, or strong_right:
+            "only left"/"strong left" means strong_left, "prefer left but can play right" means left.
+            Learning may propose a changed side preference but the owner must approve it.
             If a required fact is unknown, use ask_owner with one short direct question in explanation.
             Never invent a known preference. Do not put internal task analysis in an owner question.
             Broad Barcelona is sufficient; a district is optional. Do not ask for facts already in playerBrief.
@@ -200,7 +204,14 @@ pipelines:
             Negotiate independently for YOUR player's preferences. Never assume authority to commit.
             A propose/counter/accept must include hour 19 or 20, style competitive or social, side left/right/either.
             The organizer's booked time and style are fixed. Candidate agents may counter, but cannot move a booking.
-            Court side is a soft preference: use remaining side vacancies to propose a feasible side.
+            Doubles is TWO teams of TWO: team A and team B each need one left and one right player.
+            There are TWO left places and TWO right places overall. Alba playing left does not force others right.
+            A proposed side always belongs to the CANDIDATE, even when you act as organizer.
+            Persona side: either means both OK; left/right means soft preference, other side allowed;
+            strong_left/strong_right means ONLY that side. Never override a strong preference.
+            Proposal side must be left/right/either, never strong_left/strong_right.
+            Prefer the candidate's preferred side when vacant; a soft preference may compromise on the other.
+            Use available team-side slots. Code assigns a concrete team and side before human approval.
             After owner_clarified, use the owner's explicitly authorized hour/style; do not ask the same question again.
             Accept an agreeable peer offer. Prefer compromise over unnecessary counteroffers. Do not simply repeat offers.
             Hard constraints must be respected. Soft preferences may be explored within authorized flexibility.

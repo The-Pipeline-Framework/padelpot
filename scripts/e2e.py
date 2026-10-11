@@ -62,6 +62,8 @@ for owner in ('nico','luz','teo'):
 match=api('/view')['matches'][0]
 assert match['status']=='CONFIRMED' and len(match['players'])==4
 assert list(match['players'].values()).count('left')==2 and list(match['players'].values()).count('right')==2
+for team in ('A', 'B'):
+    assert sorted(side for owner,side in match['players'].items() if match['teams'].get(owner)==team)==['left','right']
 assert any(p['kind']=='clarify' for p in roots[1]['humanReplies']), 'Nico must explicitly authorize the 20:00 → 19:00 compromise.'
 assert sum(p['kind'] in ('open','participation') for r in roots for p in r['humanReplies'])==4, 'Four humans must approve their own participation.'
 before_play=files()

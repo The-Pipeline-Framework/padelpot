@@ -18,4 +18,7 @@ public class MatchEntity {
 
   @ElementCollection(fetch = FetchType.EAGER)
   public Map<String, String> players = new LinkedHashMap<>();
+
+  @ElementCollection(fetch = FetchType.EAGER)
+  public Map<String, String> teams = new LinkedHashMap<>();
 }

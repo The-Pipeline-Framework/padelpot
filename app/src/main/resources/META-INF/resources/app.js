@@ -416,6 +416,20 @@ function renderMatch(matches) {
       ),
       node("span", "Every place needs a human yes.", "status"),
     );
+  } else if (m.rosterValid === false) {
+    card.append(
+      node("h3", "Saved roster needs a fresh match"),
+      node(
+        "p",
+        "These recorded places cannot form two valid teams. Their sides have been preserved.",
+      ),
+      node(
+        "p",
+        Object.entries(m.players)
+          .map(([id, side]) => `${ownerName(id)} · ${side}`)
+          .join("\n"),
+      ),
+    );
   } else {
     card.append(
       node("h3", `${m.hour}:00 · ${m.style}`),
@@ -424,16 +438,23 @@ function renderMatch(matches) {
         `${m.date} · ${m.area}\n${m.level || "Intermediate"} · No court booking included`,
       ),
     );
-    const people = node("div", undefined, "match-players");
-    for (const id of Object.keys(m.players)) {
-      const o = owners.find((o) => o.id === id);
-      const a = node("span", initials(o?.name || id));
-      a.style.background = o?.color;
-      a.title = o?.name || id;
-      people.append(a);
+    const people = node("div", undefined, "match-teams");
+    for (const team of ["A", "B"]) {
+      const roster = node("div", undefined, "team-card");
+      roster.append(node("strong", "Team " + team));
+      for (const side of ["left", "right"]) {
+        const id = Object.keys(m.players).find(
+          (id) => m.teams?.[id] === team && m.players[id] === side,
+        );
+        const place = node("div", undefined, "court-place");
+        place.append(
+          node("small", side === "left" ? "Left" : "Right"),
+          node("span", id ? ownerName(id) : "Open place"),
+        );
+        roster.append(place);
+      }
+      people.append(roster);
     }
-    for (let i = Object.keys(m.players).length; i < 4; i++)
-      people.append(node("span", "+"));
     card.append(
       people,
       node(
@@ -495,7 +516,19 @@ function renderPersona() {
     const row = node("div", undefined, "fact");
     const label = node("div");
     label.append(
-      node("strong", `${field}: ${f.value}`),
+      node(
+        "strong",
+        field === "side"
+          ? "Court side: " +
+              ({
+                either: "Both sides OK",
+                left: "Prefer left · either side OK",
+                right: "Prefer right · either side OK",
+                strong_left: "Left only",
+                strong_right: "Right only",
+              }[f.value] || f.value)
+          : `${field}: ${f.value}`,
+      ),
       node("small", `${f.source} · ${f.disclosure}`),
     );
     row.append(
