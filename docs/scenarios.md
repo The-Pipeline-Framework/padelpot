@@ -28,3 +28,9 @@ The first permission/correlation run passed 29 focused tests. A follow-up run pa
 The [padel rule amendment](padel-specs.md) covers strong, soft and absent side preferences, concrete team-side approval, no implicit repositioning of confirmed players, native persistence of team assignments and conservative legacy roster handling. The fixture runner checks each team's two sides in addition to total capacity.
 
 The amendment passed 36 focused business/persistence tests and fixture-based browser checks. OpenRouter packaging and Ollama compilation passed. This does not supersede the failed recursive-parent runs above or claim a new live Gemma E2E recording.
+
+## Opening versus searching
+
+A live Gemma trace returned `find` for Alba's explicit “Open a competitive doubles match this Thursday at 19:00 in Barcelona. I prefer left.” request. The prompt now distinguishes organizing from joining, and an application guard rejects a conflicting action before discovery or a persona edit. Fixture tests feed the wrong `find` proposal, verify a bounded correction, and require Alba's approval for the resulting `open` review. Repeated mismatch terminates without mutation. The native topology test uses the exact reported message and verifies one root, correlated approval and no participation before approval.
+
+The correction passed 45 focused tests (`ChatGoalTest`, `InvariantTest`, `DoublesTest`, `NativePersistenceTest`, `TopologyTest`). The wrong-action recovery uses deterministic model proposals; this is not evidence of a new live Gemma run or a fix for the separate recursive-parent failure.

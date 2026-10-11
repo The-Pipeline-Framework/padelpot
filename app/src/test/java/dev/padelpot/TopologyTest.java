@@ -49,13 +49,15 @@ public class TopologyTest {
                     "messageId",
                     id,
                     "text",
-                    "Open a competitive match on Thursday at 19:00. I play left."))
+                    "Open a competitive doubles match this Thursday at 19:00 in Barcelona. I prefer"
+                        + " left."))
             .post("/api/messages")
             .then()
             .statusCode(200)
             .extract()
             .path("executionId");
     Map<String, Object> interaction = awaitPending("alba");
+    assertEquals("open", interaction.get("kind"));
     assertEquals(
         1, store.snapshot().events.stream().filter(e -> e.type().equals("ROOT_STARTED")).count());
     assertTrue(store.snapshot().matches.isEmpty(), "No participation without approval");
@@ -137,7 +139,8 @@ public class TopologyTest {
                     "messageId",
                     id,
                     "text",
-                    "Open a competitive match on Thursday at 19:00. I play left."))
+                    "Open a competitive doubles match this Thursday at 19:00 in Barcelona. I prefer"
+                        + " left."))
             .post("/api/messages")
             .then()
             .statusCode(200)

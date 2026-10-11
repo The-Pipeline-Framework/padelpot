@@ -49,6 +49,20 @@ public class PadelApplication implements PadelOperations {
                   + ". Turn="
                   + s.turn()
                   + ". Do not restart onboarding. The fixed match needs four humans.";
+      if (s.mode().equals("chat")) {
+        ChatGoal goal = ChatGoal.from(s.ownerText());
+        if (goal == ChatGoal.OPEN)
+          task +=
+              " Explicit owner goal: OPEN a new match as organizer, not FIND an existing match."
+                  + " Propose open with the requested terms, or ask about a genuinely missing fact."
+                  + " Opening is possible without any existing match and needs human approval.";
+        if (goal == ChatGoal.FIND)
+          task += " Explicit owner goal: FIND an existing match to join, not OPEN a new match.";
+        if (s.lastAction().equals("chat_goal_corrected"))
+          task +=
+              " Your previous action conflicted with this explicit goal and was rejected."
+                  + " Correct the action; no search, persona update or commitment occurred.";
+      }
       if (!s.mode().equals("chat") && !s.actorId().equals(s.ownerId()))
         task +=
             ". Your owner is already confirmed. Evaluate the candidate offer; its court side"
@@ -398,6 +412,33 @@ public class PadelApplication implements PadelOperations {
   }
 
   private TurnOutcome chat(TurnState s, AgentDecision d) {
+    ChatGoal goal = ChatGoal.from(s.ownerText());
+    if (!goal.accepts(d.action())) {
+      store.event(
+          "CHAT_GOAL_REJECTED",
+          Map.of("requestId", s.requestId(), "goal", goal.name(), "action", d.action()));
+      if (s.turn() >= 1)
+        return done(
+            s,
+            "INTENT_MISMATCH",
+            "I couldn't prepare the match request you gave me. No match or preference was changed."
+                + " Please try again.");
+      return again(
+          copy(
+              s,
+              s.actorId(),
+              s.mode(),
+              s.matchId(),
+              s.turn() + 1,
+              s.ownerVersion(),
+              s.organizerVersion(),
+              s.hour(),
+              s.style(),
+              s.side(),
+              "chat_goal_corrected",
+              s.transcript(),
+              s.ownerText()));
+    }
     return switch (d.action()) {
       case "message", "ask_owner" -> {
         if (d.field().equals("hour")) {

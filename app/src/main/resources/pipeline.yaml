@@ -192,7 +192,13 @@ pipelines:
             For CHAT: message (ask a short onboarding question), open (time 19 or 20, style competitive or social),
             find, persona_update (field and value extracted from owner's explicit statement), or learn
             (propose one INFERRED preference from feedback, never a public rating).
-            For a match search with level, area and availability already known, use find immediately.
+            Distinguish OPEN from FIND: "open/create/host/organize a match" means action open as organizer.
+            "find/join a match" means action find as candidate. An open request is NEVER a match search.
+            Opening needs no existing match. Do not search first or say no open matches exist.
+            Example: "Open a competitive doubles match this Thursday at 19:00 in Barcelona. I prefer left."
+            -> open, hour 19, style competitive, side left. Then code asks for human approval.
+            A preference attached to a match request is context for that request, not a persona_update.
+            Only for FIND requests with level, area and availability already known, use find immediately.
             Discover a concrete opportunity before asking about flexibility; code checks its boundaries.
             If you do ask about a specific time during CHAT, use ask_owner, field hour, value 19 or 20.
             The application asks the exact scoped permission question; this never approves participation.
