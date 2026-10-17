@@ -5,8 +5,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.command.*;
 
 @ApplicationScoped
-public class TurnCommandId implements CommandIdGenerator<ModelTurn> {
-  public String commandId(CommandDescriptor d, ModelTurn t) {
+public class TurnCommandId implements CommandIdGenerator<ValidatedModelTurn> {
+  public String commandId(CommandDescriptor d, ValidatedModelTurn t) {
     return "turn:" + t.state().requestId() + ":" + t.state().turn();
   }
 }

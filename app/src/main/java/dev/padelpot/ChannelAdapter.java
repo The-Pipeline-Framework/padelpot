@@ -232,6 +232,30 @@ public class ChannelAdapter {
     }
   }
 
+  @DELETE
+  @Path("/owners/{owner}/history")
+  public Object eraseHistory(
+      @PathParam("owner") String owner,
+      @HeaderParam("Idempotency-Key") String idempotencyKey) {
+    synchronized (store) {
+      PlayerCheck(owner);
+    }
+    String requestId =
+        idempotencyKey == null || idempotencyKey.isBlank()
+            ? UUID.randomUUID().toString()
+            : idempotencyKey;
+    if (requestId.length() > 100) throw new BadRequestException("Idempotency key is too long");
+    return pipeline
+        .executePipelineAsync(
+            new OwnerInteraction.EraseRequested(
+                new HistoryEraseRequest(requestId, TENANT, owner)),
+            TENANT,
+            "history-erase:" + owner + ":" + requestId,
+            false)
+        .await()
+        .indefinitely();
+  }
+
   @GET
   @Path("/executions/{id}")
   public Object execution(@PathParam("id") String id) {
