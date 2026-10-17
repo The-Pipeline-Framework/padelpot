@@ -12,8 +12,9 @@ public class OwnerTurnMapper implements Mapper<TurnState, ApprovedTurnEntity> {
     var entity = new ApprovedTurnEntity();
     entity.eventId = "padelpot-demo:" + turn.requestId() + ":owner";
     entity.tenantId = "padelpot-demo";
-    entity.ownerId = turn.ownerId();
-    entity.conversationId = turn.ownerId();
+    entity.ownerId = turn.actorId();
+    entity.conversationId = turn.actorId();
+    entity.rootOwnerId = turn.ownerId();
     entity.requestId = turn.requestId();
     entity.speaker = "owner";
     entity.occurredAt = Instant.ofEpochMilli(turn.deadline() - 900_000);
@@ -37,7 +38,8 @@ public class OwnerTurnMapper implements Mapper<TurnState, ApprovedTurnEntity> {
 
   public TurnState fromExternal(ApprovedTurnEntity entity) {
     return new TurnState(
-        entity.requestId, entity.ownerId, entity.actorId, entity.mode, entity.matchId,
+        entity.requestId, entity.rootOwnerId == null ? entity.ownerId : entity.rootOwnerId,
+        entity.actorId, entity.mode, entity.matchId,
         entity.turn, entity.deadline, entity.ownerVersion, entity.organizerVersion,
         entity.hour, entity.style, entity.side, entity.lastAction,
         entity.transcript, entity.ownerText, entity.team);

@@ -20,7 +20,7 @@ public class ApprovedTurnEntity {
   @Column(length = 4096) public String ownerText;
 
   // The selected persistence mapping is reversible without storing model prompts or proposals.
-  public String actorId, mode, matchId, style, side, lastAction, team, status;
+  public String actorId, rootOwnerId, mode, matchId, style, side, lastAction, team, status;
   public String reviewKind, reviewField, reviewValue;
   @Column(name = "turn_number") public int turn;
   @Column(name = "requested_hour") public int hour;

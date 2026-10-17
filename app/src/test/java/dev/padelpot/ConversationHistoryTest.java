@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import dev.padelpot.domain.Review;
 import dev.padelpot.domain.TurnState;
 import dev.padelpot.persistence.AggregateQueries;
+import dev.padelpot.persistence.OwnerTurnMapper;
 import dev.padelpot.persistence.ReviewTurnMapper;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -19,6 +20,7 @@ class ConversationHistoryTest {
   @Inject AggregateQueries history;
   @Inject PadelApplication application;
   @Inject ReviewTurnMapper reviewTurns;
+  @Inject OwnerTurnMapper ownerTurns;
   private final Set<String> executions = new LinkedHashSet<>();
 
   @Test
@@ -29,6 +31,23 @@ class ConversationHistoryTest {
     var changed = new Review(state, "conversation", "Different question?", "", "");
     assertEquals(reviewTurns.toExternal(first).eventId, reviewTurns.toExternal(first).eventId);
     assertNotEquals(reviewTurns.toExternal(first).eventId, reviewTurns.toExternal(changed).eventId);
+  }
+
+  @Test
+  void organizerTurnBelongsToActingOwnersHistoryWithoutChangingRootOwner() {
+    TurnState root = followUp("nico");
+    TurnState organizer = new TurnState(
+        root.requestId(), root.ownerId(), "alba", "negotiate", root.matchId(), root.turn(),
+        root.deadline(), root.ownerVersion(), root.organizerVersion(), root.hour(),
+        root.style(), root.side(), root.lastAction(), root.transcript(),
+        "private organizer instruction", root.team());
+
+    var saved = ownerTurns.toExternal(organizer);
+    assertEquals("alba", saved.ownerId);
+    assertEquals("alba", saved.conversationId);
+    assertEquals("nico", saved.rootOwnerId);
+    assertEquals("private organizer instruction", saved.text);
+    assertEquals(organizer, ownerTurns.fromExternal(saved));
   }
 
   @AfterEach
