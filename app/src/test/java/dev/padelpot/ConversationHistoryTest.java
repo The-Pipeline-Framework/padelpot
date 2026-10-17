@@ -50,6 +50,35 @@ class ConversationHistoryTest {
     assertEquals(organizer, ownerTurns.fromExternal(saved));
   }
 
+  @Test
+  void privacyScenarioKeepsOrganizersInstructionOutOfCandidateHistory() throws Exception {
+    String execution = given()
+        .contentType("application/json")
+        .body(Map.of("scenario", "privacy"))
+        .post("/api/demo/scenarios")
+        .then()
+        .statusCode(200)
+        .extract()
+        .path("executionId");
+    executions.add(execution);
+    String privateInstruction = "Synthetic privacy challenge";
+    for (int attempt = 0; attempt < 100
+        && history.allHistory("padelpot-demo", "alba").stream()
+            .noneMatch(turn -> turn.text().contains(privateInstruction)); attempt++) {
+      Thread.sleep(30);
+    }
+
+    assertTrue(history.allHistory("padelpot-demo", "alba").stream()
+        .anyMatch(turn -> turn.text().contains(privateInstruction)));
+    assertTrue(history.allHistory("padelpot-demo", "nico").stream()
+        .noneMatch(turn -> turn.text().contains(privateInstruction)));
+    assertTrue(application.contextWithHistory(followUp("nico")).recentHistory().stream()
+        .noneMatch(turn -> turn.contains(privateInstruction)));
+    session.load();
+    assertTrue(session.player("nico").chat.stream()
+        .noneMatch(turn -> turn.text().contains(privateInstruction)));
+  }
+
   @AfterEach
   void resolveOwnedInteractions() throws Exception {
     for (String ownerId : List.of("alba", "nico")) {
