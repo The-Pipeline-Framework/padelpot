@@ -37,7 +37,12 @@ public class FixtureModel extends LlmQueryConnectorProvider {
                   int hour = 19;
                   String side = "either", style = "competitive";
                   if (task.startsWith("CHAT")) {
-                    if (text.toLowerCase().contains("open")) {
+                    if (text.equalsIgnoreCase("What did I say before?")) {
+                      for (JsonNode entry : n.path("recentHistory")) {
+                        String line = entry.asText();
+                        if (line.startsWith("owner: ")) explanation = "Earlier you said " + line.substring(7);
+                      }
+                    } else if (text.toLowerCase().contains("open")) {
                       action = "open";
                       side = "left";
                     } else if (text.toLowerCase().contains("find")) action = "find";

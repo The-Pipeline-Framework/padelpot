@@ -14,6 +14,30 @@ import java.util.*;
 public class PadelApplication implements PadelOperations {
   @Inject DemoSession store;
 
+  @Inject dev.padelpot.persistence.AggregateQueries aggregates;
+
+  public ModelInput contextWithHistory(TurnState s) {
+    var history = aggregates.recentHistory("padelpot-demo", s.actorId(), s.requestId(),
+        ConversationContextSelection.HISTORY_READ_LIMIT);
+    return new ConversationContextSelection().select(s, context(s), history).input();
+  }
+
+  public Result eraseHistory(HistoryEraseRequest request) {
+    if (!"padelpot-demo".equals(request.tenantId()))
+      throw new IllegalArgumentException("Unknown tenant");
+    synchronized (store) {
+      store.player(request.ownerId());
+    }
+    aggregates.eraseConversation(request.tenantId(), request.ownerId());
+    synchronized (store) {
+      store.player(request.ownerId()).chat.clear();
+      store.message(request.ownerId(), "agent", "Your saved conversation was erased.");
+    }
+    return new Result(
+        request.requestId(), request.ownerId(), "HISTORY_ERASED",
+        "Your saved conversation was erased.", "");
+  }
+
   public ModelInput context(TurnState s) {
     synchronized (store) {
       Player actor = store.player(s.actorId());
@@ -105,14 +129,20 @@ public class PadelApplication implements PadelOperations {
           brief.toString(),
           terms,
           List.copyOf(s.transcript()),
-          s.actorId().equals(s.ownerId()) ? s.ownerText() : "");
+          s.actorId().equals(s.ownerId()) ? s.ownerText() : "",
+          List.of());
     }
   }
 
-  public TurnOutcome apply(ModelTurn mt) {
+  // Direct policy fixtures enter through the same validation used by the authored step.
+  TurnOutcome apply(ModelTurn mt) {
+    return apply(ValidateTurn.validate(mt));
+  }
+
+  public TurnOutcome apply(ValidatedModelTurn mt) {
     synchronized (store) {
       TurnState s = mt.state();
-      AgentDecision d = ValidateTurn.validate(mt).decision();
+      AgentDecision d = mt.decision();
       if (Policy.expired(s, System.currentTimeMillis()))
         return done(s, "EXPIRED", "Your match intent expired. Please send a new request.");
       Intent intent = store.snapshot().intents.get(s.requestId());

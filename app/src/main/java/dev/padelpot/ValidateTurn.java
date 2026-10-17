@@ -7,7 +7,7 @@ import java.util.Set;
 import org.pipelineframework.service.ReactiveService;
 
 @ApplicationScoped
-public class ValidateTurn implements ReactiveService<ModelTurn, ModelTurn> {
+public class ValidateTurn implements ReactiveService<ModelTurn, ValidatedModelTurn> {
   static final Set<String> ACTIONS =
       Set.of(
           "message",
@@ -23,14 +23,14 @@ public class ValidateTurn implements ReactiveService<ModelTurn, ModelTurn> {
           "request_field",
           "disclose");
 
-  public Uni<ModelTurn> process(ModelTurn t) {
+  public Uni<ValidatedModelTurn> process(ModelTurn t) {
     return Uni.createFrom().item(validate(t));
   }
 
-  static ModelTurn validate(ModelTurn t) {
+  static ValidatedModelTurn validate(ModelTurn t) {
     AgentDecision d = t.decision();
     if (d == null || d.action() == null)
-      return new ModelTurn(
+      return new ValidatedModelTurn(
           t.state(),
           new AgentDecision(
               "decline", 0, "", "", "", "", "Invalid proposal; no action authorized."));
@@ -54,8 +54,8 @@ public class ValidateTurn implements ReactiveService<ModelTurn, ModelTurn> {
               && Set.of("social", "competitive").contains(d.style())
               && Set.of("either", "left", "right").contains(d.side());
     return valid
-        ? t
-        : new ModelTurn(
+        ? new ValidatedModelTurn(t.state(), t.decision())
+        : new ValidatedModelTurn(
             t.state(),
             new AgentDecision(
                 "decline",

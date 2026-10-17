@@ -29,7 +29,7 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
   }
 
   public Collection<? extends ConnectorOperation> operations() {
-    return List.of(new Load(this), new Apply(this), new Answer(this), new FinalAnswer(this));
+    return List.of(new Load(this), new Apply(this), new Answer(this), new FinalAnswer(this), new EraseHistory(this));
   }
 
   private static final class Load
@@ -54,13 +54,14 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
 
     public CompletionStage<QueryOutcome<ModelInput>> query(
         QueryInvocation<TurnState, OperationConfig, ModelInput> i) {
-      return CompletableFuture.completedFuture(
-          new QueryOutcome.Found<>(p.application.get().context(i.input())));
+      return CompletableFuture.supplyAsync(
+          () -> new QueryOutcome.Found<>(p.application.get().contextWithHistory(i.input())),
+          Thread::startVirtualThread);
     }
   }
 
   private static final class Apply
-      implements CommandOperation<ModelTurn, OperationConfig, TurnOutcome> {
+      implements CommandOperation<ValidatedModelTurn, OperationConfig, TurnOutcome> {
     private final PadelConnector p;
 
     Apply(PadelConnector p) {
@@ -76,7 +77,7 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
     }
 
     public CompletionStage<CommandOutcome<TurnOutcome>> dispatch(
-        CommandInvocation<ModelTurn, OperationConfig> i) {
+        CommandInvocation<ValidatedModelTurn, OperationConfig> i) {
       return CompletableFuture.completedFuture(
           new CommandOutcome.Succeeded<>(
               p.application.get().apply(i.input()), CommandConfirmation.none(), List.of()));
@@ -128,6 +129,32 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
       OwnerInteraction r = p.application.get().answerFinal(i.input());
       return CompletableFuture.completedFuture(
           new CommandOutcome.Succeeded<>(r, CommandConfirmation.none(), List.of()));
+    }
+  }
+
+  private static final class EraseHistory
+      implements CommandOperation<HistoryEraseRequest, OperationConfig, Result> {
+    private final PadelConnector p;
+
+    EraseHistory(PadelConnector p) {
+      this.p = p;
+    }
+
+    public String id() {
+      return "history.erase";
+    }
+
+    public Optional<ConnectorConfigSchema<OperationConfig>> configurationSchema() {
+      return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.history.erase", 1));
+    }
+
+    public CompletionStage<CommandOutcome<Result>> dispatch(
+        CommandInvocation<HistoryEraseRequest, OperationConfig> invocation) {
+      return CompletableFuture.supplyAsync(
+          () -> new CommandOutcome.Succeeded<>(
+              p.application.get().eraseHistory(invocation.input()),
+              CommandConfirmation.none(), List.of()),
+          Thread::startVirtualThread);
     }
   }
 }

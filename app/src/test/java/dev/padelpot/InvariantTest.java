@@ -78,6 +78,8 @@ class InvariantTest {
           throw new AssertionError("Expected an owner decision");
       case OwnerInteraction.Again ignored ->
           throw new AssertionError("Expected a completed decision");
+      case OwnerInteraction.EraseRequested ignored ->
+          throw new AssertionError("Expected a completed decision");
     };
   }
 
