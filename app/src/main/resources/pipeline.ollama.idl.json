@@ -803,6 +803,20 @@
         "nullMarkerNumber" : null,
         "nullMarkerProtoName" : null
       }, {
+        "number" : 7,
+        "name" : "recentHistory",
+        "protoName" : "recent_history",
+        "type" : "string",
+        "repeated" : true,
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
+      }, {
         "number" : 5,
         "name" : "state",
         "protoName" : "state",
@@ -1005,6 +1019,53 @@
       },
       "contributedIdentity" : null
     },
+    "ValidatedModelTurn" : {
+      "name" : "ValidatedModelTurn",
+      "kind" : "record",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "decision",
+        "protoName" : "decision",
+        "type" : "AgentDecision",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
+      }, {
+        "number" : 2,
+        "name" : "state",
+        "protoName" : "state",
+        "type" : "TurnState",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
+      } ],
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
+    },
     "Review" : {
       "name" : "Review",
       "kind" : "record",
@@ -1111,6 +1172,66 @@
         "number" : 2,
         "name" : "text",
         "protoName" : "text",
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
+      } ],
+      "target" : null,
+      "variants" : [ ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
+    },
+    "HistoryEraseRequest" : {
+      "name" : "HistoryEraseRequest",
+      "kind" : "record",
+      "fields" : [ {
+        "number" : 1,
+        "name" : "ownerId",
+        "protoName" : "owner_id",
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
+      }, {
+        "number" : 2,
+        "name" : "requestId",
+        "protoName" : "request_id",
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
+      }, {
+        "number" : 3,
+        "name" : "tenantId",
+        "protoName" : "tenant_id",
         "type" : "string",
         "presence" : "REQUIRED",
         "nullability" : "NON_NULL",
@@ -1410,6 +1531,11 @@
         "protoName" : "again",
         "number" : 1
       }, {
+        "discriminator" : "eraseRequested",
+        "payload" : "HistoryEraseRequest",
+        "protoName" : "erase_requested",
+        "number" : 6
+      }, {
         "discriminator" : "finished",
         "payload" : "Result",
         "protoName" : "finished",
@@ -1564,6 +1690,10 @@
     "outputTypeName" : "Result"
   }, {
     "name" : "PublishMatchResult",
+    "inputTypeName" : "OwnerInteraction",
+    "outputTypeName" : "Result"
+  }, {
+    "name" : "Erase approved conversation history",
     "inputTypeName" : "OwnerInteraction",
     "outputTypeName" : "Result"
   }, {

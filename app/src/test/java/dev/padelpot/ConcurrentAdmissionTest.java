@@ -34,7 +34,7 @@ class ConcurrentAdmissionTest {
               return invocation.callRealMethod();
             })
         .when(application)
-        .context(any(TurnState.class));
+        .contextWithHistory(any(TurnState.class));
 
     Map<String, String> executions = new LinkedHashMap<>();
     try {

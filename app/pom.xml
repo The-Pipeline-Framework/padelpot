@@ -35,6 +35,11 @@
       <version>${tpf.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.pipelineframework</groupId>
+      <artifactId>conversation-context-connector</artifactId>
+      <version>${tpf.version}</version>
+    </dependency>
+    <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-rest-jackson</artifactId>
     </dependency>
@@ -132,6 +137,7 @@
             <arg>-Apipeline.generatedSourcesDir=${project.build.directory}/generated-sources/pipeline</arg>
             <arg>-Apipeline.module=padelpot-app</arg>
             <arg>-Apipeline.orchestrator.generate=true</arg>
+            <arg>-Apersistence.provider.class=org.pipelineframework.plugin.persistence.provider.VThreadPersistenceProvider</arg>
           </compilerArgs>
         </configuration>
         <executions>

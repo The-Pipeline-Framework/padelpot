@@ -134,6 +134,12 @@ public class DemoSession {
                 + (Doubles.valid(m) ? m.status : "INVALID_ROSTER").toLowerCase()
                 + ".");
     }
+    for (var player : db.players.values()) {
+      for (var turn : aggregates.recentHistory("padelpot-demo", player.id, "", 99)) {
+        player.chat.add(new Chat(turn.eventId(), turn.speaker(), turn.text(), turn.occurredAt()));
+      }
+      while (player.chat.size() > 100) player.chat.removeFirst();
+    }
   }
 
   public synchronized void reset(boolean onboarding) {

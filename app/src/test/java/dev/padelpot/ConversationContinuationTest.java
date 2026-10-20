@@ -49,11 +49,11 @@ class ConversationContinuationTest {
     var resumedWithContext = new AtomicBoolean(false);
     doAnswer(
             invocation -> {
-              ModelTurn turn = invocation.getArgument(0);
+              ValidatedModelTurn turn = invocation.getArgument(0);
               if (turn.state().mode().equals("chat")) {
                 if (first.getAndSet(false))
                   return application.apply(
-                      new ModelTurn(
+                      new ValidatedModelTurn(
                           turn.state(),
                           new AgentDecision(
                               "ask_owner",
@@ -71,7 +71,7 @@ class ConversationContinuationTest {
               return invocation.callRealMethod();
             })
         .when(application)
-        .apply(any(ModelTurn.class));
+        .apply(any(ValidatedModelTurn.class));
     String execution =
         given()
             .contentType("application/json")
