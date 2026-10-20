@@ -67,6 +67,10 @@ class ConversationHistoryTest {
             .noneMatch(turn -> turn.text().contains(privateInstruction)); attempt++) {
       Thread.sleep(30);
     }
+    Map<String, Object> candidateCheckpoint = TopologyTest.awaitPending("nico");
+    assertEquals(execution, candidateCheckpoint.get("executionId"));
+    assertEquals("participation", candidateCheckpoint.get("kind"));
+    TopologyTest.awaitStatus(execution, "WAITING_EXTERNAL");
 
     assertTrue(history.allHistory("padelpot-demo", "alba").stream()
         .anyMatch(turn -> turn.text().contains(privateInstruction)));
