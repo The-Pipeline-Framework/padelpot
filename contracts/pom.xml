@@ -29,6 +29,11 @@
       <version>${tpf.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.pipelineframework.blocks</groupId>
+      <artifactId>chat-agent-query</artifactId>
+      <version>${tpf.version}</version>
+    </dependency>
+    <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-arc</artifactId>
     </dependency>

@@ -9,12 +9,66 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.time.*;
 import java.util.*;
+import org.pipelineframework.blocks.chat.ChatEvidence;
+import org.pipelineframework.blocks.chat.ChatResult;
+import org.pipelineframework.blocks.chat.ChatState;
+import org.pipelineframework.connector.conversation.ConversationScope;
 
 @ApplicationScoped
 public class PadelApplication implements PadelOperations {
   @Inject DemoSession store;
 
   @Inject dev.padelpot.persistence.AggregateQueries aggregates;
+
+  /** Hydration is an application-owned Query at a new execution boundary. */
+  public ChatState chatContext(ChatIngress ingress) {
+    if (!ingress.requestId().startsWith(ingress.ownerId() + ":"))
+      throw new IllegalArgumentException("Chat request ID does not match the authorized owner");
+    synchronized (store) {
+      store.player(ingress.ownerId());
+    }
+    var scope = new ConversationScope("padelpot-demo", ingress.ownerId(), ingress.ownerId());
+    var saved = aggregates.recentHistory(scope.tenantId(), scope.ownerId(), ingress.requestId(), 64);
+    ChatState state = ChatState.start(scope, ingress.requestId(), ingress.text());
+    for (var turn : saved) {
+      String provenance = switch (turn.speaker()) {
+        case "owner" -> "user";
+        case "agent" -> "assistant";
+        default -> throw new IllegalArgumentException("Unknown persisted chat speaker");
+      };
+      state = state.appendEvidence(new ChatEvidence(
+          "saved:" + turn.cursor(), provenance, turn.text(), Optional.empty()));
+    }
+    return state;
+  }
+
+  /** Only public, fictional demo information is exposed to the model through this typed Query. */
+  public CourtGuide courtGuide(CourtGuideRequest request) {
+    if (request.topic().isBlank() || request.topic().length() > 120)
+      throw new IllegalArgumentException("Court guide topic must be bounded");
+    return new CourtGuide("PadelPot is a fictional demo. Its Barcelona courts, matches, and bookings "
+        + "are simulated; it has no real court address or live availability.");
+  }
+
+  /** Application-owned acceptance and delivery after the Block proposes a reply. */
+  public Result acceptChatReply(ChatResult result) {
+    var reply = result.reply().orElseThrow(() ->
+        new IllegalStateException("ChatAgent handoff requires explicit application handling"));
+    var scope = reply.proposedNextState().scope();
+    if (!"padelpot-demo".equals(scope.tenantId())
+        || !scope.ownerId().equals(scope.conversationId())
+        || !reply.messageId().startsWith(scope.ownerId() + ":")) {
+      throw new IllegalArgumentException("Chat reply scope does not match the authorized owner");
+    }
+    synchronized (store) {
+      store.player(scope.ownerId());
+      String delivery = "chat-agent-reply:" + reply.messageId();
+      if (store.snapshot().applied.add(delivery)) {
+        store.message(scope.ownerId(), "agent", reply.text());
+      }
+    }
+    return new Result(reply.messageId(), scope.ownerId(), "CHAT_REPLIED", reply.text(), "");
+  }
 
   public ModelInput contextWithHistory(TurnState s) {
     var history = aggregates.recentHistory("padelpot-demo", s.actorId(), s.requestId(),

@@ -429,6 +429,18 @@ textarea::placeholder {
   height: 38px;
   padding: 3px;
 }
+.chat-mode {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  color: #66765d;
+  font-size: 11px;
+  cursor: pointer;
+}
+.chat-mode input {
+  accent-color: var(--green);
+}
 .composer-note {
   font-size: 9px;
   color: #95a088;

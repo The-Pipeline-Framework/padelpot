@@ -80,6 +80,8 @@ class InvariantTest {
           throw new AssertionError("Expected a completed decision");
       case OwnerInteraction.EraseRequested ignored ->
           throw new AssertionError("Expected a completed decision");
+      case OwnerInteraction.Chat ignored ->
+          throw new AssertionError("Expected a completed decision");
     };
   }
 

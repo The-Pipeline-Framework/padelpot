@@ -295,7 +295,7 @@ async function send(text) {
   $("send").disabled = true;
   clearError();
   try {
-    const accepted = await api("/messages", {
+    const accepted = await api($('chat-agent-mode').checked ? "/messages/chat-agent" : "/messages", {
       ownerId: selected,
       messageId: crypto.randomUUID(),
       text,

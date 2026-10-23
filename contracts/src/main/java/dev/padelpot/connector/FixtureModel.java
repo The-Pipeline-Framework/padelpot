@@ -28,6 +28,29 @@ public class FixtureModel extends LlmQueryConnectorProvider {
               public CompletionStage<LlmDecision> decide(LlmTurnRequest r) {
                 try {
                   JsonNode n = new ObjectMapper().readTree(r.applicationStateJson());
+                  if (n.has("message") && n.has("context")) {
+                    if (r.tools().stream().anyMatch(tool -> tool.alias().equals("court_guide"))
+                        && n.path("message").asText().toLowerCase(Locale.ROOT).contains("court")) {
+                      return CompletableFuture.completedFuture(new LlmDecision(
+                          new LlmToolProposal("court_guide", "{\"topic\":\"court\"}")));
+                    }
+                    String answer = "I can discuss our conversation, but I cannot book a match here.";
+                    for (JsonNode entry : n.path("context")) {
+                      if (entry.path("provenance").asText().startsWith("query:")) {
+                        answer = "The court guide says " + entry.path("text").asText();
+                      }
+                    }
+                    if (n.path("message").asText().equalsIgnoreCase("What did I say before?")) {
+                      for (JsonNode entry : n.path("context")) {
+                        if (entry.path("provenance").asText().equals("owner")
+                            || entry.path("provenance").asText().equals("user")) {
+                          answer = "Earlier you said " + entry.path("text").asText();
+                        }
+                      }
+                    }
+                    return CompletableFuture.completedFuture(new LlmDecision(
+                        new LlmToolProposal("complete", new ObjectMapper().writeValueAsString(Map.of("text", answer)))));
+                  }
                   String task = n.path("task").asText(), text = n.path("ownerMessage").asText();
                   String action = "message",
                       field = "",

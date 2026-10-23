@@ -6,6 +6,14 @@ TPF is inspired by [Functional Core / Imperative Shell (FCIS)](https://pipelinef
 
 In PadelPot, the **typed core** includes generated domain contracts, validation and deterministic privacy, eligibility and participation rules. Gemma returns an `AgentDecision`; it cannot author trusted execution state or approve a human commitment. The **smart shell** coordinates model Queries, application Commands, nested execution, correlated owner responses and replay evidence. Application connectors enforce business authority and emit canonical aggregate values; native TPF persistence observes those values through declared representation mappings.
 
+## Reusable conversation Block
+
+The separate `/api/messages/chat-agent` route is a real consumer of the `chat-agent-query` Block. PadelPot creates an authorized `ChatState` from the current owner message and, at this new execution boundary, an application Query reads that owner's accepted turns. The Block carries the state through context selection, one model decision, an optional typed read-only `court.guide` Query, at most one synthesis inference, and a proposed reply. Its state bound and ContextAssembler's model-input bound are independent. The court guide returns fictional public information; no model call receives match authority.
+
+The application binds model and Query operations. It accepts the reply with its own Command, validates owner scope and request identity, and emits accepted turns through native TPF persistence. The Block has no storage or mandatory history dependency. Query observations and model decisions use the normal TPF capture/replay path; Query failures fail the execution. The Block's public result can represent an inert handoff for future application actions, but this composition accepts only replies. The existing negotiation, privacy, persistence and correlated Await flow below remains the authority path for match actions.
+
+PadelPot's local H2/JPA history read is blocking, so its `chat.context` operation declares TPF's `BlockingQueryOperation` marker for worker offload. The mutable history read uses conservative Query capabilities; its observation is captured for replay without claiming cross-execution cacheability. ChatAgent's context preparation and Query reduction remain reactive. A production application may bind a reactive history provider without changing the Block contract.
+
 ## Negotiation and human approval
 
 The web chat is a channel adapter for a real local application. Every owner message uses an envelope with owner ID, message ID, text and, when replying, interaction ID and explicit decision. Future WhatsApp/Signal/email adapters would implement that same envelope and delivery contract. None is implemented here.
