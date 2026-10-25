@@ -7,6 +7,8 @@ import jakarta.inject.Inject;
 import java.util.*;
 import java.util.concurrent.*;
 import org.pipelineframework.connector.*;
+import org.pipelineframework.blocks.chat.ChatState;
+import org.pipelineframework.blocks.chat.ChatResult;
 
 @ApplicationScoped
 public class PadelConnector implements ConnectorProvider<PadelConnector.Config> {
@@ -29,7 +31,67 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
   }
 
   public Collection<? extends ConnectorOperation> operations() {
-    return List.of(new Load(this), new Apply(this), new Answer(this), new FinalAnswer(this), new EraseHistory(this));
+    return List.of(new Load(this), new ChatContext(this), new CourtGuideLookup(this), new PublishChatReply(this),
+        new Apply(this), new Answer(this), new FinalAnswer(this), new EraseHistory(this));
+  }
+
+  private static final class CourtGuideLookup
+      implements QueryOperation<CourtGuideRequest, OperationConfig, CourtGuide> {
+    private final PadelConnector p;
+
+    CourtGuideLookup(PadelConnector p) { this.p = p; }
+
+    public String id() { return "court.guide"; }
+
+    public QueryCapabilities capabilities() { return QueryCapabilities.cacheable(); }
+
+    public Optional<ConnectorConfigSchema<OperationConfig>> configurationSchema() {
+      return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.court.guide", 1));
+    }
+
+    public CompletionStage<QueryOutcome<CourtGuide>> query(
+        QueryInvocation<CourtGuideRequest, OperationConfig, CourtGuide> invocation) {
+      return CompletableFuture.completedFuture(
+          new QueryOutcome.Found<>(p.application.get().courtGuide(invocation.input())));
+    }
+  }
+
+  private static final class PublishChatReply
+      implements CommandOperation<ChatResult, OperationConfig, Result> {
+    private final PadelConnector p;
+
+    PublishChatReply(PadelConnector p) { this.p = p; }
+
+    public String id() { return "chat.reply.publish"; }
+
+    public Optional<ConnectorConfigSchema<OperationConfig>> configurationSchema() {
+      return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.chat.reply", 1));
+    }
+
+    public CompletionStage<CommandOutcome<Result>> dispatch(
+        CommandInvocation<ChatResult, OperationConfig> invocation) {
+      return CompletableFuture.completedFuture(new CommandOutcome.Succeeded<>(
+          p.application.get().acceptChatReply(invocation.input()), CommandConfirmation.none(), List.of()));
+    }
+  }
+
+  private static final class ChatContext
+      implements BlockingQueryOperation<ChatIngress, OperationConfig, ChatState> {
+    private final PadelConnector p;
+
+    ChatContext(PadelConnector p) { this.p = p; }
+
+    public String id() { return "chat.context"; }
+
+    public Optional<ConnectorConfigSchema<OperationConfig>> configurationSchema() {
+      return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.chat.context", 1));
+    }
+
+    public CompletionStage<QueryOutcome<ChatState>> query(
+        QueryInvocation<ChatIngress, OperationConfig, ChatState> invocation) {
+      return CompletableFuture.completedFuture(
+          new QueryOutcome.Found<>(p.application.get().chatContext(invocation.input())));
+    }
   }
 
   private static final class Load

@@ -25,6 +25,33 @@ public class ChannelAdapter {
   public record Message(
       String ownerId, String messageId, String text, String interactionId, String choice) {}
 
+  /** Explicit conversation-only entrypoint; match decisions continue through /messages. */
+  @POST
+  @Path("/messages/chat-agent")
+  public Object chatAgent(Message msg) {
+    if (msg == null || msg.ownerId() == null || msg.messageId() == null
+        || msg.messageId().isBlank() || msg.messageId().length() > 100
+        || msg.text() == null || msg.text().isBlank() || msg.text().length() > 1200
+        || (msg.interactionId() != null && !msg.interactionId().isBlank())) {
+      throw new BadRequestException("An owner, message ID, and bounded text are required");
+    }
+    synchronized (store) {
+      PlayerCheck(msg.ownerId());
+    }
+    String requestId = msg.ownerId() + ":" + msg.messageId();
+    RunAsyncAcceptedDto accepted = pipeline.executePipelineAsync(
+        new OwnerInteraction.Chat(new ChatIngress(requestId, msg.ownerId(), msg.text())),
+        TENANT, requestId, false).await().indefinitely();
+    synchronized (store) {
+      if (store.snapshot().applied.add("message:" + requestId)) {
+        store.message(msg.ownerId(), "owner", msg.text());
+        store.event("ROOT_STARTED", Map.of("executionId", accepted.executionId(),
+            "ownerId", msg.ownerId(), "requestId", msg.messageId()));
+      }
+    }
+    return accepted;
+  }
+
   @POST
   @Path("/messages")
   public Object send(Message msg) {

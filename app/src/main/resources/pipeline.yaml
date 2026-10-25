@@ -124,6 +124,19 @@ types:
       - [text, string]
   HistoryEraseRequest:
     fields: [[requestId, string], [tenantId, string], [ownerId, string]]
+  ChatIngress:
+    java: dev.padelpot.domain.ChatIngress
+    fields: [[requestId, string], [ownerId, string], [text, string]]
+    mappings:
+      persistence:
+        type: dev.padelpot.persistence.ApprovedTurnEntity
+        mapper: dev.padelpot.persistence.ChatIngressMapper
+  CourtGuideRequest:
+    java: dev.padelpot.domain.CourtGuideRequest
+    fields: [[topic, string]]
+  CourtGuide:
+    java: dev.padelpot.domain.CourtGuide
+    fields: [[answer, string]]
   AnsweredReview:
     java: dev.padelpot.domain.AnsweredReview
     fields:
@@ -159,12 +172,18 @@ types:
         mapper: dev.padelpot.persistence.PlayObservationMapper
   OwnerInteraction:
     java: dev.padelpot.domain.OwnerInteraction
-    variants: { again: TurnState, finished: Result, ownerChanged: Owner, matchChanged: Match, observedPlay: PlayObservation, eraseRequested: HistoryEraseRequest }
+    variants: { again: TurnState, finished: Result, ownerChanged: Owner, matchChanged: Match, observedPlay: PlayObservation, eraseRequested: HistoryEraseRequest, chat: ChatIngress }
   AgentResult:
     java: dev.padelpot.domain.AgentResult
     fields: [[outcome, AgentEnd]]
   LoopEnds:
     variants: { finished: Result, reviewRequired: Review, nested: AgentResult }
+blockBindings:
+  org.pipelineframework.chat/chat-agent-query:
+    llm.decide: { using: model }
+    llm.synthesize: { using: model }
+    tools:
+      court_guide: { using: application, operation: court.guide, input: CourtGuideRequest, config: { label: public-court-guide } }
 pipelines:
   personal-agent:
     input: TurnState
@@ -444,6 +463,41 @@ steps:
     java:
       input: dev.padelpot.domain.HistoryEraseRequest
       output: dev.padelpot.domain.Result
+  - name: Prepare reusable chat state
+    kind: query
+    cardinality: ONE_TO_ONE
+    input: OwnerInteraction
+    accepts: [ChatIngress]
+    output: ChatState
+    using: application
+    operation: chat.context
+    operationVersion: 1
+    config: { label: scoped-chat-hydration }
+    java:
+      input: dev.padelpot.domain.ChatIngress
+      output: org.pipelineframework.blocks.chat.ChatState
+  - name: Run reusable ChatAgent
+    pipeline: chat-agent-query
+    cardinality: ONE_TO_ONE
+    input: ChatState
+    output: ChatResult
+    java:
+      input: org.pipelineframework.blocks.chat.ChatState
+      output: org.pipelineframework.blocks.chat.ChatResult
+  - name: Accept conversational reply
+    kind: command
+    cardinality: ONE_TO_ONE
+    input: ChatResult
+    output: Result
+    using: application
+    operation: chat.reply.publish
+    operationVersion: 1
+    config: { label: accepted-conversation-reply }
+    commandIdGenerator: dev.padelpot.ChatReplyCommandId
+    duplicatePolicy: RETURN_RECORDED
+    java:
+      input: org.pipelineframework.blocks.chat.ChatResult
+      output: dev.padelpot.domain.Result
   - name: Publish private owner result
     service: dev.padelpot.FinishResult
     cardinality: ONE_TO_ONE
@@ -460,5 +514,5 @@ aspects:
     scope: STEPS
     position: BEFORE_STEP
     config:
-      targetSteps: [Load isolated player snapshot, Request owner decision, PublishOwnerResult, PublishMatchResult, ObservePlayedMatch, Publish private owner result]
+      targetSteps: [Load isolated player snapshot, Request owner decision, PublishOwnerResult, PublishMatchResult, ObservePlayedMatch, Prepare reusable chat state, Publish private owner result]
       pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
