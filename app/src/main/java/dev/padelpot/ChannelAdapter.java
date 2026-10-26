@@ -25,33 +25,6 @@ public class ChannelAdapter {
   public record Message(
       String ownerId, String messageId, String text, String interactionId, String choice) {}
 
-  /** Explicit conversation-only entrypoint; match decisions continue through /messages. */
-  @POST
-  @Path("/messages/chat-agent")
-  public Object chatAgent(Message msg) {
-    if (msg == null || msg.ownerId() == null || msg.messageId() == null
-        || msg.messageId().isBlank() || msg.messageId().length() > 100
-        || msg.text() == null || msg.text().isBlank() || msg.text().length() > 1200
-        || (msg.interactionId() != null && !msg.interactionId().isBlank())) {
-      throw new BadRequestException("An owner, message ID, and bounded text are required");
-    }
-    synchronized (store) {
-      PlayerCheck(msg.ownerId());
-    }
-    String requestId = msg.ownerId() + ":" + msg.messageId();
-    RunAsyncAcceptedDto accepted = pipeline.executePipelineAsync(
-        new OwnerInteraction.Chat(new ChatIngress(requestId, msg.ownerId(), msg.text())),
-        TENANT, requestId, false).await().indefinitely();
-    synchronized (store) {
-      if (store.snapshot().applied.add("message:" + requestId)) {
-        store.message(msg.ownerId(), "owner", msg.text());
-        store.event("ROOT_STARTED", Map.of("executionId", accepted.executionId(),
-            "ownerId", msg.ownerId(), "requestId", msg.messageId()));
-      }
-    }
-    return accepted;
-  }
-
   @POST
   @Path("/messages")
   public Object send(Message msg) {
@@ -122,40 +95,21 @@ public class ChannelAdapter {
       }
       return result;
     }
-    TurnState state;
-    synchronized (store) {
-      var p = store.player(msg.ownerId());
-      state =
-          new TurnState(
-              msg.ownerId() + ":" + msg.messageId(),
-              p.id,
-              p.id,
-              "chat",
-              "",
-              0,
-              System.currentTimeMillis() + 900_000,
-              p.version,
-              0L,
-              19,
-              "competitive",
-              Doubles.preferredSide(p),
-              "",
-              List.of(),
-              msg.text(),
-              "");
-    }
+    if (msg.text().isBlank())
+      throw new BadRequestException("A new message requires bounded text");
+    String requestId = msg.ownerId() + ":" + msg.messageId();
     // Native admission and human completion run without holding application state locks.
     RunAsyncAcceptedDto accepted =
         pipeline
             .executePipelineAsync(
-                new OwnerInteraction.Again(state),
+                new OwnerAdmission.Chat(new ChatIngress(requestId, msg.ownerId(), msg.text())),
                 TENANT,
-                msg.ownerId() + ":" + msg.messageId(),
+                requestId,
                 false)
             .await()
             .indefinitely();
     synchronized (store) {
-      if (store.snapshot().applied.add("message:" + msg.ownerId() + ":" + msg.messageId())) {
+      if (store.snapshot().applied.add("message:" + requestId)) {
         store.message(msg.ownerId(), "owner", msg.text());
         store.event(
             "ROOT_STARTED",
@@ -274,7 +228,7 @@ public class ChannelAdapter {
     if (requestId.length() > 100) throw new BadRequestException("Idempotency key is too long");
     return pipeline
         .executePipelineAsync(
-            new OwnerInteraction.EraseRequested(
+            new OwnerAdmission.EraseRequested(
                 new HistoryEraseRequest(requestId, TENANT, owner)),
             TENANT,
             "history-erase:" + owner + ":" + requestId,
@@ -336,7 +290,7 @@ public class ChannelAdapter {
     // Erasure is an explicit owner action, distinct from persistence of the new typed value.
     aggregates.eraseOwnerHistory(owner);
     persistOwnerAction(
-        new OwnerInteraction.OwnerChanged(updated), owner, updated.change().requestId());
+        new OwnerAdmission.OwnerChanged(updated), owner, updated.change().requestId());
     return Map.of("version", updated.version());
   }
 
@@ -361,7 +315,7 @@ public class ChannelAdapter {
       updated = store.ownerValue(owner);
     }
     persistOwnerAction(
-        new OwnerInteraction.OwnerChanged(updated), owner, updated.change().requestId());
+        new OwnerAdmission.OwnerChanged(updated), owner, updated.change().requestId());
     return Map.of("blocked", updated.blocked());
   }
 
@@ -394,7 +348,7 @@ public class ChannelAdapter {
       updated = store.matchValue(id);
     }
     persistOwnerAction(
-        new OwnerInteraction.MatchChanged(updated),
+        new OwnerAdmission.MatchChanged(updated),
         updated.organizer(),
         updated.change().requestId());
     return Map.of("cancelled", true);
@@ -491,7 +445,7 @@ public class ChannelAdapter {
                 "");
       var accepted =
           pipeline
-              .executePipelineAsync(new OwnerInteraction.Again(state), TENANT, requestId, false)
+              .executePipelineAsync(new OwnerAdmission.Again(state), TENANT, requestId, false)
               .await()
               .indefinitely();
       store.event(
@@ -586,7 +540,7 @@ public class ChannelAdapter {
     }
     var accepted =
         persistOwnerAction(
-            new OwnerInteraction.ObservedPlay(observation),
+            new OwnerAdmission.ObservedPlay(observation),
             body.get("ownerId"),
             observation.match().change().requestId());
     return Map.of("played", true, "executionId", accepted.executionId());
@@ -594,7 +548,7 @@ public class ChannelAdapter {
 
   /** One external owner action admits one root; native aspects observe its aggregate outputs. */
   private RunAsyncAcceptedDto persistOwnerAction(
-      OwnerInteraction action, String owner, String request) {
+      OwnerAdmission action, String owner, String request) {
     var accepted =
         pipeline
             .executePipelineAsync(action, TENANT, "action:" + request, false)

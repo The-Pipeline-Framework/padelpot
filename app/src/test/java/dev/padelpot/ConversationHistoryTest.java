@@ -109,20 +109,21 @@ class ConversationHistoryTest {
   void approvedTurnsSurviveReloadAndStayWithinOwnerScope() throws Exception {
     session.reset(false);
     String request = UUID.randomUUID().toString();
-    executions.add(given()
+    String initialExecution = given()
         .contentType("application/json")
         .body(Map.of("ownerId", "alba", "messageId", request, "text", "I enjoy quiet courts"))
         .post("/api/messages")
         .then()
         .statusCode(200)
         .extract()
-        .path("executionId"));
-    TopologyTest.awaitPending("alba");
+        .path("executionId");
+    executions.add(initialExecution);
+    TopologyTest.awaitStatus(initialExecution, "SUCCEEDED");
 
     var saved = history.allHistory("padelpot-demo", "alba");
     assertEquals(List.of("owner", "agent"), saved.stream().map(AggregateQueries.HistoryTurn::speaker).toList());
     assertEquals("I enjoy quiet courts", saved.getFirst().text());
-    assertTrue(saved.getLast().text().contains("level"));
+    assertFalse(saved.getLast().text().isBlank());
     assertTrue(saved.getFirst().cursor() < saved.getLast().cursor());
     var firstPage = history.historyPage("padelpot-demo", "alba", 0, 1);
     assertEquals(List.of(saved.getFirst()), firstPage.turns());
@@ -164,22 +165,26 @@ class ConversationHistoryTest {
             .extract()
             .path("executionId");
     executions.add(followUpExecution);
-    assertTrue(awaitPrompt(followUpExecution).contains("quiet courts"));
+    TopologyTest.awaitStatus(followUpExecution, "SUCCEEDED");
+    assertTrue(history.allHistory("padelpot-demo", "alba").stream()
+        .anyMatch(turn -> turn.speaker().equals("agent")
+            && turn.text().contains("quiet courts")));
   }
 
   @Test
   void explicitCommandErasesOnlyTheRequestedOwnersApprovedTurns() throws Exception {
     session.reset(false);
     for (String owner : List.of("alba", "nico")) {
-      executions.add(given()
+      String execution = given()
           .contentType("application/json")
           .body(Map.of("ownerId", owner, "messageId", UUID.randomUUID().toString(), "text", "Hello"))
           .post("/api/messages")
           .then()
           .statusCode(200)
           .extract()
-          .path("executionId"));
-      TopologyTest.awaitPending(owner);
+          .path("executionId");
+      executions.add(execution);
+      TopologyTest.awaitStatus(execution, "SUCCEEDED");
     }
     assertFalse(history.allHistory("padelpot-demo", "alba").isEmpty());
     assertFalse(history.allHistory("padelpot-demo", "nico").isEmpty());
@@ -210,15 +215,4 @@ class ConversationHistoryTest {
         "What did I say before?", "");
   }
 
-  private String awaitPrompt(String executionId) throws Exception {
-    for (int attempt = 0; attempt < 100; attempt++) {
-      Map<String, Object> owner = given().get("/api/owners/alba").then().statusCode(200).extract().as(Map.class);
-      for (Object item : (List<?>) owner.get("pending")) {
-        Map<?, ?> pending = (Map<?, ?>) item;
-        if (executionId.equals(pending.get("executionId"))) return String.valueOf(pending.get("prompt"));
-      }
-      Thread.sleep(30);
-    }
-    throw new AssertionError("Follow-up did not reach Await");
-  }
 }

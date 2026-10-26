@@ -8,7 +8,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import org.pipelineframework.connector.*;
 import org.pipelineframework.blocks.chat.ChatState;
-import org.pipelineframework.blocks.chat.ChatResult;
 
 @ApplicationScoped
 public class PadelConnector implements ConnectorProvider<PadelConnector.Config> {
@@ -31,7 +30,8 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
   }
 
   public Collection<? extends ConnectorOperation> operations() {
-    return List.of(new Load(this), new ChatContext(this), new CourtGuideLookup(this), new PublishChatReply(this),
+    return List.of(new Load(this), new ChatContext(this),
+        new CourtGuideLookup(this), new PublishChatReply(this), new ApplyOwnerAction(this),
         new Apply(this), new Answer(this), new FinalAnswer(this), new EraseHistory(this));
   }
 
@@ -57,7 +57,7 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
   }
 
   private static final class PublishChatReply
-      implements CommandOperation<ChatResult, OperationConfig, Result> {
+      implements CommandOperation<OwnerReply, OperationConfig, Result> {
     private final PadelConnector p;
 
     PublishChatReply(PadelConnector p) { this.p = p; }
@@ -69,9 +69,28 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
     }
 
     public CompletionStage<CommandOutcome<Result>> dispatch(
-        CommandInvocation<ChatResult, OperationConfig> invocation) {
+        CommandInvocation<OwnerReply, OperationConfig> invocation) {
       return CompletableFuture.completedFuture(new CommandOutcome.Succeeded<>(
           p.application.get().acceptChatReply(invocation.input()), CommandConfirmation.none(), List.of()));
+    }
+  }
+
+  private static final class ApplyOwnerAction
+      implements CommandOperation<OwnerAction, OperationConfig, TurnOutcome> {
+    private final PadelConnector p;
+
+    ApplyOwnerAction(PadelConnector p) { this.p = p; }
+
+    public String id() { return "owner.action.apply"; }
+
+    public Optional<ConnectorConfigSchema<OperationConfig>> configurationSchema() {
+      return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.owner.action", 1));
+    }
+
+    public CompletionStage<CommandOutcome<TurnOutcome>> dispatch(
+        CommandInvocation<OwnerAction, OperationConfig> invocation) {
+      return CompletableFuture.completedFuture(new CommandOutcome.Succeeded<>(
+          p.application.get().applyOwnerAction(invocation.input()), CommandConfirmation.none(), List.of()));
     }
   }
 
