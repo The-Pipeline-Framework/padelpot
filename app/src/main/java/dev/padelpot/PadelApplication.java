@@ -24,6 +24,7 @@ public class PadelApplication implements PadelOperations {
     if (!ingress.requestId().startsWith(ingress.ownerId() + ":"))
       throw new IllegalArgumentException("Chat request ID does not match the authorized owner");
     String playerBrief;
+    boolean expiredUnfinishedIntent;
     synchronized (store) {
       var owner = store.player(ingress.ownerId());
       var state = new TurnState(
@@ -31,6 +32,27 @@ public class PadelApplication implements PadelOperations {
           System.currentTimeMillis() + 900_000, owner.version, 0L, 19,
           "competitive", Doubles.preferredSide(owner), "", List.of(), ingress.text(), "");
       playerBrief = context(state).playerBrief();
+      expiredUnfinishedIntent =
+          store.snapshot().intents.values().stream()
+              .filter(intent -> intent.ownerId.equals(ingress.ownerId()) && !intent.cancelled)
+              .filter(
+                  intent ->
+                      store.snapshot().events.stream()
+                          .noneMatch(
+                              event ->
+                                  event.type().equals("OWNER_RESULT")
+                                      && intent.requestId.equals(event.data().get("requestId"))))
+              .max(Comparator.comparingLong(intent -> intent.deadline))
+              .filter(
+                  intent ->
+                      intent.deadline <= System.currentTimeMillis()
+                          && owner.chat.stream()
+                              .noneMatch(
+                                  message ->
+                                      message.role().equals("agent")
+                                          && Instant.parse(message.time()).toEpochMilli()
+                                              > intent.deadline))
+              .isPresent();
     }
     var scope = new ConversationScope("padelpot-demo", ingress.ownerId(), ingress.ownerId());
     var saved = aggregates.recentHistory(scope.tenantId(), scope.ownerId(), ingress.requestId(), 64);
@@ -56,7 +78,18 @@ public class PadelApplication implements PadelOperations {
             + "new match terms. Use 0 and empty strings for fields unused by the selected kind. "
             + "PadelPot can also propose one profile preference or one inferred preference from "
             + "played-match feedback. Ask a natural clarifying question when an intended action "
-            + "or required term is unclear. A proposal never grants participation or approval.", Optional.empty()));
+            + "or required term is unclear. A proposal never grants participation or approval. "
+            + "Approval questions in saved history are historical, not live Await interactions. "
+            + "This new message cannot answer one; if asked to resume an old question, explain "
+            + "that the owner must start a fresh explicit request. Never propose approval through "
+            + "owner_action.", Optional.empty()));
+    if (expiredUnfinishedIntent)
+      state = state.appendEvidence(new ChatEvidence(
+          "expired-intent:" + ingress.requestId(), "application-status",
+          "The owner's previous match request expired before it completed. Its approval question"
+              + " cannot be resumed or answered now. If the owner asks what happened, explain"
+              + " that a new explicit open or find request is needed. Do not propose approval"
+              + " or imply that the owner joined the match.", Optional.empty()));
     return state;
   }
 

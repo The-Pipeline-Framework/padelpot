@@ -3,6 +3,7 @@ package dev.padelpot;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.padelpot.domain.*;
+import dev.padelpot.persistence.AggregateQueries;
 import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.*;
@@ -348,6 +349,51 @@ class InvariantTest {
                 s, new AgentDecision("accept", 19, "competitive", "right", "", "", "I accept")));
     assertInstanceOf(TurnOutcome.ReviewRequired.class, o);
     assertEquals(1, store.snapshot().matches.get("match").players.size());
+  }
+
+  @Test
+  void expiredOwnerIntentIsCarriedIntoOnlyThatOwnersNextConversation() {
+    port.aggregates =
+        new AggregateQueries() {
+          @Override
+          public List<HistoryTurn> recentHistory(
+              String tenantId, String ownerId, String currentRequestId, int limit) {
+            return ownerId.equals("nico")
+                ? List.of(
+                    new HistoryTurn(
+                        1, "prior-review", "agent", "Approve participation?", "2026-10-26T19:20:00Z"))
+                : List.of();
+          }
+        };
+    var expired = new DemoSession.Intent();
+    expired.requestId = "nico:expired";
+    expired.ownerId = "nico";
+    expired.deadline = System.currentTimeMillis() - 1;
+    store.snapshot().intents.put(expired.requestId, expired);
+    store.player("nico").chat.clear();
+
+    var nico = port.chatContext(new ChatIngress("nico:fresh", "nico", "Do I need to start over?"));
+    assertTrue(
+        nico.evidence().stream()
+            .anyMatch(
+                evidence ->
+                    evidence.provenance().equals("application-status")
+                        && evidence.text().contains("cannot be resumed")));
+    assertTrue(
+        nico.evidence().stream()
+            .anyMatch(
+                evidence ->
+                    evidence.provenance().equals("application-capabilities")
+                        && evidence.text().contains("saved history are historical")));
+    var alba = port.chatContext(new ChatIngress("alba:fresh", "alba", "What happened?"));
+    assertTrue(
+        alba.evidence().stream()
+            .noneMatch(evidence -> evidence.provenance().equals("application-status")));
+    store.message("nico", "agent", "A new request can begin now.");
+    var later = port.chatContext(new ChatIngress("nico:later", "nico", "Find again."));
+    assertTrue(
+        later.evidence().stream()
+            .noneMatch(evidence -> evidence.provenance().equals("application-status")));
   }
 
   @Test

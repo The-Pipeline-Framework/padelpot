@@ -12,6 +12,8 @@ let selected = "alba",
   lastDecision = "",
   executionStatuses = new Map();
 const decisionDrafts = new Map();
+const freshFindRequest =
+  "Find an existing open competitive doubles match for me now. Please start the search and negotiate within my saved preferences. I will separately approve participation.";
 const node = (tag, text, className) => {
   const el = document.createElement(tag);
   if (text !== undefined) el.textContent = text;
@@ -150,13 +152,18 @@ function renderWorking() {
   } else if (!working) $("working")?.remove();
   if (["FAILED", "DLQ"].includes(status) && !working) {
     if (!$("request-failure")) {
+      const expired = detail?.latestRequest?.errorCode === "AWAIT_TIMEOUT";
       const failure = node(
         "div",
-        "Your latest request failed. Open Agent activity to see what happened.",
+        expired
+          ? "That approval expired after 15 minutes. It cannot be resumed. Send a new request to try again."
+          : "Your latest request failed. A new message starts a fresh request; open Agent activity for details.",
         "bubble request-failure",
       );
       failure.id = "request-failure";
       failure.setAttribute("role", "status");
+      if (selected !== "alba")
+        failure.append(button("Start a new match search", () => send(freshFindRequest)));
       $("messages").append(failure);
     }
   } else $("request-failure")?.remove();
@@ -258,7 +265,7 @@ function renderSuggestions() {
       : [
           [
             "Find me a match",
-            "Find me a competitive match this Thursday after work.",
+            freshFindRequest,
           ],
         ];
   chips.push([

@@ -174,7 +174,13 @@ public class ChannelAdapter {
     if (!latestExecution.isBlank()) {
       try {
         var status = pipeline.getExecutionStatus(TENANT, latestExecution).await().indefinitely();
-        latestRequest = Map.of("executionId", latestExecution, "status", status.status().name());
+        latestRequest =
+            status.errorCode() == null
+                ? Map.of("executionId", latestExecution, "status", status.status().name())
+                : Map.of(
+                    "executionId", latestExecution,
+                    "status", status.status().name(),
+                    "errorCode", status.errorCode());
       } catch (NotFoundException historical) {
         // Business participations can outlive memory-backed execution history.
       }
