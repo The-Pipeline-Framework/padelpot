@@ -29,12 +29,35 @@ public class FixtureModel extends LlmQueryConnectorProvider {
                 try {
                   JsonNode n = new ObjectMapper().readTree(r.applicationStateJson());
                   if (n.has("message") && n.has("context")) {
+                    String message = n.path("message").asText().toLowerCase(Locale.ROOT);
+                    if (r.tools().stream().anyMatch(tool -> tool.alias().equals("owner_action"))) {
+                      String kind = message.contains("open") || message.contains("host")
+                          || message.contains("create") ? "open"
+                          : message.contains("find") || message.contains("join") ? "find"
+                          : message.contains("feedback") ? "learn"
+                          : message.contains("my level") || message.contains("my preference") ? "profile"
+                          : "";
+                      if (!kind.isEmpty()) {
+                        Map<String, Object> action = new LinkedHashMap<>();
+                        action.put("kind", kind);
+                        action.put("hour", 19);
+                        action.put("style", "competitive");
+                        action.put("side", "left");
+                        action.put("field", kind.equals("profile") ? "level" : kind.equals("learn") ? "style" : "");
+                        action.put("value", kind.equals("profile") ? "intermediate" : kind.equals("learn") ? "social" : "");
+                        action.put("explanation", "Fixture owner action; approval remains with the owner.");
+                        return CompletableFuture.completedFuture(new LlmDecision(
+                            new LlmToolProposal("owner_action", new ObjectMapper().writeValueAsString(action))));
+                      }
+                    }
                     if (r.tools().stream().anyMatch(tool -> tool.alias().equals("court_guide"))
-                        && n.path("message").asText().toLowerCase(Locale.ROOT).contains("court")) {
+                        && message.contains("court")) {
                       return CompletableFuture.completedFuture(new LlmDecision(
                           new LlmToolProposal("court_guide", "{\"topic\":\"court\"}")));
                     }
-                    String answer = "I can discuss our conversation, but I cannot book a match here.";
+                    String answer = message.contains("match")
+                        ? "Would you like me to open a new match or find one to join?"
+                        : "I can help with padel questions and match requests.";
                     for (JsonNode entry : n.path("context")) {
                       if (entry.path("provenance").asText().startsWith("query:")) {
                         answer = "The court guide says " + entry.path("text").asText();
@@ -51,56 +74,27 @@ public class FixtureModel extends LlmQueryConnectorProvider {
                     return CompletableFuture.completedFuture(new LlmDecision(
                         new LlmToolProposal("complete", new ObjectMapper().writeValueAsString(Map.of("text", answer)))));
                   }
-                  String task = n.path("task").asText(), text = n.path("ownerMessage").asText();
-                  String action = "message",
-                      field = "",
-                      value = "",
-                      explanation =
-                          "Tell me your approximate level, broad area and typical availability.";
+                  String task = n.path("task").asText();
+                  String field = "", value = "";
                   int hour = 19;
                   String side = "either", style = "competitive";
-                  if (task.startsWith("CHAT")) {
-                    if (text.equalsIgnoreCase("What did I say before?")) {
-                      for (JsonNode entry : n.path("recentHistory")) {
-                        String line = entry.asText();
-                        if (line.startsWith("owner: ")) explanation = "Earlier you said " + line.substring(7);
-                      }
-                    } else if (text.toLowerCase().contains("open")) {
-                      action = "open";
-                      side = "left";
-                    } else if (text.toLowerCase().contains("find")) action = "find";
-                    else if (text.toLowerCase().contains("feedback")) {
-                      action = "learn";
-                      field = "style";
-                      value = "social";
-                      explanation =
-                          "You enjoyed the friendly pace. Would you prefer social matches?";
-                    } else if (text.toLowerCase().contains("level")) {
-                      action = "persona_update";
-                      field = "level";
-                      value = "intermediate";
-                    }
-                  } else {
-                    action =
-                        task.contains("Last peer action=propose")
-                                || task.contains("Last peer action=counter")
-                            ? "accept"
-                            : "propose";
-                    String brief = n.path("playerBrief").asText();
-                    side =
-                        (brief.contains("side=left") || brief.contains("side=strong_left"))
-                            ? "left"
-                            : (brief.contains("side=right") || brief.contains("side=strong_right"))
-                                ? "right"
-                                : "either";
-                    if (task.contains("as organizer")) {
-                      String terms = n.path("publicTerms").asText();
-                      side = terms.substring(terms.indexOf("side=") + 5).split(";")[0];
-                    }
-                    explanation =
-                        "The permitted terms fit this player. Participation still needs owner"
-                            + " approval.";
+                  if (task.startsWith("CHAT"))
+                    throw new IllegalStateException("Initial owner intent must use ChatAgent");
+                  String action = task.contains("Last peer action=propose")
+                          || task.contains("Last peer action=counter") ? "accept" : "propose";
+                  String brief = n.path("playerBrief").asText();
+                  side =
+                      (brief.contains("side=left") || brief.contains("side=strong_left"))
+                          ? "left"
+                          : (brief.contains("side=right") || brief.contains("side=strong_right"))
+                              ? "right"
+                              : "either";
+                  if (task.contains("as organizer")) {
+                    String terms = n.path("publicTerms").asText();
+                    side = terms.substring(terms.indexOf("side=") + 5).split(";")[0];
                   }
+                  String explanation =
+                      "The permitted terms fit this player. Participation still needs owner approval.";
                   Map<String, Object> d = new LinkedHashMap<>();
                   d.put("action", action);
                   d.put("hour", hour);

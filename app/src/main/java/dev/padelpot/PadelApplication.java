@@ -10,7 +10,6 @@ import jakarta.inject.Inject;
 import java.time.*;
 import java.util.*;
 import org.pipelineframework.blocks.chat.ChatEvidence;
-import org.pipelineframework.blocks.chat.ChatResult;
 import org.pipelineframework.blocks.chat.ChatState;
 import org.pipelineframework.connector.conversation.ConversationScope;
 
@@ -20,12 +19,18 @@ public class PadelApplication implements PadelOperations {
 
   @Inject dev.padelpot.persistence.AggregateQueries aggregates;
 
-  /** Hydration is an application-owned Query at a new execution boundary. */
+  /** One authorized hydration supplies history and permitted player facts before the Block decides. */
   public ChatState chatContext(ChatIngress ingress) {
     if (!ingress.requestId().startsWith(ingress.ownerId() + ":"))
       throw new IllegalArgumentException("Chat request ID does not match the authorized owner");
+    String playerBrief;
     synchronized (store) {
-      store.player(ingress.ownerId());
+      var owner = store.player(ingress.ownerId());
+      var state = new TurnState(
+          ingress.requestId(), owner.id, owner.id, "chat", "", 0,
+          System.currentTimeMillis() + 900_000, owner.version, 0L, 19,
+          "competitive", Doubles.preferredSide(owner), "", List.of(), ingress.text(), "");
+      playerBrief = context(state).playerBrief();
     }
     var scope = new ConversationScope("padelpot-demo", ingress.ownerId(), ingress.ownerId());
     var saved = aggregates.recentHistory(scope.tenantId(), scope.ownerId(), ingress.requestId(), 64);
@@ -39,6 +44,19 @@ public class PadelApplication implements PadelOperations {
       state = state.appendEvidence(new ChatEvidence(
           "saved:" + turn.cursor(), provenance, turn.text(), Optional.empty()));
     }
+    state = state.appendEvidence(new ChatEvidence(
+        "owner-brief:" + ingress.requestId(), "owner-context", playerBrief, Optional.empty()));
+    state = state.appendEvidence(new ChatEvidence(
+        "owner-actions:" + ingress.requestId(), "application-capabilities",
+        "The owner_action tool proposes exactly one explicit owner request. Use a natural reply for "
+            + "statements, possibilities, questions and missing terms; never treat 'considering' as an "
+            + "instruction to act. For an explicit action, kind must be exactly open, find, profile "
+            + "or learn (never 'match'). Open requires hour 19 or 20, style social or competitive, "
+            + "and side left, right or either (never strong_left or strong_right). Find needs no "
+            + "new match terms. Use 0 and empty strings for fields unused by the selected kind. "
+            + "PadelPot can also propose one profile preference or one inferred preference from "
+            + "played-match feedback. Ask a natural clarifying question when an intended action "
+            + "or required term is unclear. A proposal never grants participation or approval.", Optional.empty()));
     return state;
   }
 
@@ -51,23 +69,48 @@ public class PadelApplication implements PadelOperations {
   }
 
   /** Application-owned acceptance and delivery after the Block proposes a reply. */
-  public Result acceptChatReply(ChatResult result) {
-    var reply = result.reply().orElseThrow(() ->
-        new IllegalStateException("ChatAgent handoff requires explicit application handling"));
-    var scope = reply.proposedNextState().scope();
-    if (!"padelpot-demo".equals(scope.tenantId())
-        || !scope.ownerId().equals(scope.conversationId())
-        || !reply.messageId().startsWith(scope.ownerId() + ":")) {
-      throw new IllegalArgumentException("Chat reply scope does not match the authorized owner");
+  public Result acceptChatReply(OwnerReply reply) {
+    if (reply.messageId() == null || reply.ownerId() == null || reply.text() == null
+        || !reply.messageId().startsWith(reply.ownerId() + ":")) {
+      throw new IllegalArgumentException("Chat reply does not match the authorised owner");
     }
     synchronized (store) {
-      store.player(scope.ownerId());
+      store.player(reply.ownerId());
       String delivery = "chat-agent-reply:" + reply.messageId();
       if (store.snapshot().applied.add(delivery)) {
-        store.message(scope.ownerId(), "agent", reply.text());
+        store.message(reply.ownerId(), "agent", reply.text());
       }
     }
-    return new Result(reply.messageId(), scope.ownerId(), "CHAT_REPLIED", reply.text(), "");
+    return new Result(reply.messageId(), reply.ownerId(), "CHAT_REPLIED", reply.text(), "");
+  }
+
+  public TurnOutcome applyOwnerAction(OwnerAction action) {
+    if (action == null || action.requestId() == null || action.ownerId() == null
+        || action.ownerText() == null || action.kind() == null
+        || action.field() == null || action.value() == null || action.explanation() == null
+        || !action.requestId().startsWith(action.ownerId() + ":")
+        || !Set.of("open", "find", "profile", "learn").contains(action.kind()))
+      throw new IllegalArgumentException("Owner action request does not match its owner");
+    synchronized (store) {
+      var owner = store.player(action.ownerId());
+      var state = new TurnState(
+          action.requestId(), owner.id, owner.id, "chat", "", 0,
+          System.currentTimeMillis() + 900_000, owner.version, 0L, 19,
+          "competitive", Doubles.preferredSide(owner), "", List.of(), action.ownerText(), "");
+      String decision = switch (action.kind()) {
+        case "open" -> "open";
+        case "find" -> "find";
+        case "profile" -> "persona_update";
+        case "learn" -> "learn";
+        default -> throw new IllegalArgumentException("Unsupported owner action");
+      };
+      var proposal = new AgentDecision(decision, action.hour(), action.style(), action.side(),
+          action.field(), action.value(), action.explanation());
+      var validated = ValidateTurn.validate(new ModelTurn(state, proposal));
+      if (!validated.decision().equals(proposal))
+        throw new IllegalArgumentException("Owner action proposal failed domain validation");
+      return apply(validated);
+    }
   }
 
   public ModelInput contextWithHistory(TurnState s) {
@@ -127,20 +170,6 @@ public class PadelApplication implements PadelOperations {
                   + ". Turn="
                   + s.turn()
                   + ". Do not restart onboarding. The fixed match needs four humans.";
-      if (s.mode().equals("chat")) {
-        ChatGoal goal = ChatGoal.from(s.ownerText());
-        if (goal == ChatGoal.OPEN)
-          task +=
-              " Explicit owner goal: OPEN a new match as organizer, not FIND an existing match."
-                  + " Propose open with the requested terms, or ask about a genuinely missing fact."
-                  + " Opening is possible without any existing match and needs human approval.";
-        if (goal == ChatGoal.FIND)
-          task += " Explicit owner goal: FIND an existing match to join, not OPEN a new match.";
-        if (s.lastAction().equals("chat_goal_corrected"))
-          task +=
-              " Your previous action conflicted with this explicit goal and was rejected."
-                  + " Correct the action; no search, persona update or commitment occurred.";
-      }
       if (!s.mode().equals("chat") && !s.actorId().equals(s.ownerId()))
         task +=
             ". Your owner is already confirmed. Evaluate the candidate offer; its court side"
@@ -496,33 +525,6 @@ public class PadelApplication implements PadelOperations {
   }
 
   private TurnOutcome chat(TurnState s, AgentDecision d) {
-    ChatGoal goal = ChatGoal.from(s.ownerText());
-    if (!goal.accepts(d.action())) {
-      store.event(
-          "CHAT_GOAL_REJECTED",
-          Map.of("requestId", s.requestId(), "goal", goal.name(), "action", d.action()));
-      if (s.turn() >= 1)
-        return done(
-            s,
-            "INTENT_MISMATCH",
-            "I couldn't prepare the match request you gave me. No match or preference was changed."
-                + " Please try again.");
-      return again(
-          copy(
-              s,
-              s.actorId(),
-              s.mode(),
-              s.matchId(),
-              s.turn() + 1,
-              s.ownerVersion(),
-              s.organizerVersion(),
-              s.hour(),
-              s.style(),
-              s.side(),
-              "chat_goal_corrected",
-              s.transcript(),
-              s.ownerText()));
-    }
     return switch (d.action()) {
       case "message", "ask_owner" -> {
         if (d.field().equals("hour")) {

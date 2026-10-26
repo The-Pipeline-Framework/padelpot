@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 
-import dev.padelpot.domain.TurnState;
+import dev.padelpot.domain.ChatIngress;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
@@ -25,8 +25,8 @@ class ConcurrentAdmissionTest {
     var release = new CountDownLatch(1);
     doAnswer(
             invocation -> {
-              TurnState state = invocation.getArgument(0);
-              if (state.ownerId().equals("alba")) {
+              ChatIngress ingress = invocation.getArgument(0);
+              if (ingress.ownerId().equals("alba")) {
                 entered.countDown();
                 if (!release.await(20, TimeUnit.SECONDS))
                   throw new AssertionError("Blocked root was not released");
@@ -34,7 +34,7 @@ class ConcurrentAdmissionTest {
               return invocation.callRealMethod();
             })
         .when(application)
-        .contextWithHistory(any(TurnState.class));
+        .chatContext(any(ChatIngress.class));
 
     Map<String, String> executions = new LinkedHashMap<>();
     try {
@@ -169,7 +169,7 @@ class ConcurrentAdmissionTest {
                 "messageId",
                 "shared-channel-message-id",
                 "text",
-                "My level is intermediate"))
+                "Open a competitive match at 19:00"))
         .post("/api/messages")
         .then()
         .statusCode(200)

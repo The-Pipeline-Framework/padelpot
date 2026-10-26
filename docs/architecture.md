@@ -8,23 +8,23 @@ In PadelPot, the **typed core** includes generated domain contracts, validation 
 
 ## Reusable conversation Block
 
-The separate `/api/messages/chat-agent` route is a real consumer of the `chat-agent-query` Block. PadelPot creates an authorized `ChatState` from the current owner message and, at this new execution boundary, an application Query reads that owner's accepted turns. The Block carries the state through context selection, one model decision, an optional typed read-only `court.guide` Query, at most one synthesis inference, and a proposed reply. Its state bound and ContextAssembler's model-input bound are independent. The court guide returns fictional public information; no model call receives match authority.
+The unified `/api/messages` route consumes the `chat-agent-query` Block for every new owner message. An application-owned captured Query hydrates authorised history and permitted player facts once, before the Block sees the message. The Block selects bounded model context and makes one decision: a natural reply, one typed read-only `court.guide` Query followed by synthesis, or a validated inert `OwnerAction` handoff. Its carried-state bound and ContextAssembler’s model-input bound are independent. The court guide returns fictional public information; no model call receives match authority.
 
-The application binds model and Query operations. It accepts the reply with its own Command, validates owner scope and request identity, and emits accepted turns through native TPF persistence. The Block has no storage or mandatory history dependency. Query observations and model decisions use the normal TPF capture/replay path; Query failures fail the execution. The Block's public result can represent an inert handoff for future application actions, but this composition accepts only replies. The existing negotiation, privacy, persistence and correlated Await flow below remains the authority path for match actions.
+The application binds the model, Query and finite owner-action Command contract. It validates the Block result, then accepts a reply or admits an action through its own Command. That Command checks owner scope and request identity; native TPF persistence observes accepted turns. The Block has no storage or mandatory history dependency. Query observations and model decisions use normal TPF capture/replay; Query failures fail the execution. A handoff never executes inside the Block and never counts as owner approval. Match proposals enter the existing negotiation, privacy, persistence and correlated Await flow; pending human answers resume Await directly.
 
-PadelPot's local H2/JPA history read is blocking, so its `chat.context` operation declares TPF's `BlockingQueryOperation` marker for worker offload. The mutable history read uses conservative Query capabilities; its observation is captured for replay without claiming cross-execution cacheability. ChatAgent's context preparation and Query reduction remain reactive. A production application may bind a reactive history provider without changing the Block contract.
+PadelPot’s local H2/JPA history read is blocking, so its `chat.context` operation declares TPF’s `BlockingQueryOperation` marker for worker offload. The mutable history read uses conservative Query capabilities; its observation is captured for replay without claiming cross-execution cacheability. ChatAgent’s context preparation and Query reduction remain reactive. A production application may bind a reactive history provider without changing the Block contract.
 
 ## Negotiation and human approval
 
 The web chat is a channel adapter for a real local application. Every owner message uses an envelope with owner ID, message ID, text and, when replying, interaction ID and explicit decision. Future WhatsApp/Signal/email adapters would implement that same envelope and delivery contract. None is implemented here.
 
-`pipeline.yaml` and its generated canonical domain contracts own execution. A new message admits one queue-async root. A nested `personal-agent` pipeline loads a versioned minimal actor snapshot through an application Query, makes one Gemma Query, validates the inert decision, and dispatches an application Command. The Command returns a typed continuation, owner review or final result. The existing self-recursive nested invocation advances to the next agent; it does not call PipelineExecutionService or create an extra root.
+`pipeline.yaml` and its generated canonical domain contracts own execution. A new message admits one queue-async root. `chat.context` reads accepted owner history and player facts before ChatAgent. A reply goes to `chat.reply.publish`; an `OwnerAction` goes through `ProjectOwnerChat` and `owner.action.apply`. This Command returns a typed continuation, owner review or final result. Later player-specific negotiation turns load their own versioned actor snapshot through `persona.snapshot`; the personal agent then makes one Gemma Query, validates its decision and dispatches `turn.apply`. The existing self-recursive nested invocation advances to the next negotiating agent in the same root.
 
 The model sees an explicit structured-output schema and inspectable instructions. TPF's completion envelope copies trusted state from input after validating the decision. Actor IDs, request IDs, versions, expiry and transcript are carried by the framework, not supplied by the model. There is no tool executor in the inference provider. Application code applies only the permitted structured action.
 
-Conversational `message` and `ask_owner` actions in chat return a `conversation` review instead of finishing the request. The regular review operation suspends through Await. The composer sends the answer with that interaction ID and a `clarify` choice; the resumed state carries the original request, private question and answer, preserving expiry and persona version. This is bounded request context, not long-lived memory. A conversation answer cannot approve participation or a persona update. One conversational answer can precede the final approval checkpoint; another clarification at that checkpoint requires a fresh request.
+ChatAgent can ask a natural clarifying question as a persisted reply. A correction in a later message is hydrated with the owner's accepted history before the next decision. During negotiation, an `ask_owner` action still returns a `conversation` review and suspends through native Await. The composer sends the answer with that interaction ID; the resumed state preserves expiry and persona version. A conversation answer cannot approve participation or a persona update.
 
-Explicit English requests to open/host a match or find/join one are checked against the model's action by `ChatGoal`. This is a narrow guard over the owner's original request, not a general language parser or a source of participation authority. A mismatched action is rejected before search or mutation; one bounded model correction may continue within the same root. A repeated mismatch ends with `INTENT_MISMATCH`. Other language remains model-interpreted. Match terms still come from the validated model proposal, and opening still awaits the owner's explicit approval. A preference attached to a match request supplies request context; it does not silently become a persona edit.
+The finite `OwnerAction` contract covers open, find, profile and learn requests. The connector validates model-authored arguments against that canonical input and supplies owner identity, request ID and owner text from trusted `ChatState` fields. PadelPot checks the operation, scope and domain terms again before its Command. Match terms remain proposed data, and opening still awaits explicit owner approval. A preference attached to a match request supplies request context; it does not silently become a persona edit.
 
 An owner review returns to the root. A regular `RequestReview` operation returns its immediate Review request; its `await:` modifier changes completion to an AnsweredReview after the interaction-api adapter admits a correlated owner response. The channel adapter validates the owner, parses explicit chat replies against the stored review, and combines the review with the answer before native completion; this avoids a released request-aware projector transport/domain mismatch. Privacy and participation authority are checked again by the subsequent Command. There is no Await step type. The release's inability to suspend a nested definition is accommodated by two explicit root completion checkpoints: clarification/review, then final review after clarified negotiation.
 
@@ -42,9 +42,29 @@ sequenceDiagram
     participant Gemma as Gemma inference
 
     Owner->>Channel: Message(ownerId, messageId, text)
-    Channel->>TPF: executePipelineAsync(OwnerInteraction.Again)
+    Channel->>TPF: executePipelineAsync(OwnerAdmission.Chat)
     TPF-->>Channel: Accepted execution ID
     Channel-->>Owner: Request accepted
+
+    TPF->>App: chat.context captured Query
+    App->>Session: Read authorised owner facts and approved history
+    App-->>TPF: Bounded ChatState
+    TPF->>Gemma: ChatAgent decision Query
+    alt Natural reply
+        Gemma-->>TPF: Proposed reply
+        TPF->>App: chat.reply.publish Command
+        App-->>TPF: Accepted private reply
+    else Read-only court guide
+        Gemma-->>TPF: Typed court_guide proposal
+        TPF->>App: court.guide captured Query
+        TPF->>Gemma: Synthesis Query using observation
+        Gemma-->>TPF: Proposed reply
+        TPF->>App: chat.reply.publish Command
+    else Owner action
+        Gemma-->>TPF: Validated inert OwnerAction handoff
+        TPF->>App: owner.action.apply Command
+        App-->>TPF: Continuation, Review or Result
+    end
 
     loop Bounded personal-agent turns
         TPF->>App: persona.snapshot Query

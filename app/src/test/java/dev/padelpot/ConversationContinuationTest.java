@@ -2,35 +2,56 @@ package dev.padelpot;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
 
-import dev.padelpot.domain.*;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 class ConversationContinuationTest {
   @Inject DemoSession session;
-  @InjectSpy PadelApplication application;
 
   @Test
-  void locationAnswerResumesTheSearchAndStillRequiresParticipationApproval() throws Exception {
-    searchThroughQuestion("luz", "anywhere in Barcelona is fine by me", "", "");
+  void naturalClarificationThenFindStillRequiresParticipationApproval() throws Exception {
+    var match = seedMatch("luz");
+    String clarification = send("luz", "Could we arrange a match?");
+    TopologyTest.awaitStatus(clarification, "SUCCEEDED");
+    assertTrue(session.player("luz").chat.stream()
+        .anyMatch(turn -> turn.role().equals("agent")
+            && turn.text().contains("open a new match or find one")));
+
+    String execution = send("luz", "Actually, find one instead");
+    Map<String, Object> approval = TopologyTest.awaitPending("luz");
+    assertEquals("participation", approval.get("kind"));
+    assertEquals(execution, approval.get("executionId"));
+    assertEquals(3, match.players.size(), "A model handoff cannot commit participation");
+    approve("luz", approval);
+    TopologyTest.awaitStatus(execution, "SUCCEEDED");
+    assertEquals(4, match.players.size());
   }
 
   @Test
-  void scopedFlexibilityAnswerReachesParticipationApprovalWithoutASecondTimeQuestion()
-      throws Exception {
-    searchThroughQuestion("nico", "I'm flexible", "hour", "19");
+  void scopedFlexibilityAnswerReachesParticipationApprovalInTheSameRoot() throws Exception {
+    var match = seedMatch("nico");
+    String execution = send("nico", "Find me a competitive match this Thursday after work.");
+    Map<String, Object> permission = TopologyTest.awaitPending("nico");
+    assertEquals("clarify", permission.get("kind"));
+    assertEquals(execution, permission.get("executionId"));
+    assertEquals(3, match.players.size());
+
+    given().contentType("application/json")
+        .body(Map.of("ownerId", "nico", "messageId", UUID.randomUUID().toString(),
+            "text", "I'm flexible", "interactionId", permission.get("id")))
+        .post("/api/messages").then().statusCode(200);
+    Map<String, Object> approval = awaitParticipation("nico", execution);
+    assertEquals(3, match.players.size(), "Time permission is not participation approval");
+    approve("nico", approval);
+    TopologyTest.awaitStatus(execution, "SUCCEEDED");
+    assertEquals(4, match.players.size());
   }
 
-  private void searchThroughQuestion(String owner, String answer, String field, String value)
-      throws Exception {
+  private DemoSession.Match seedMatch(String owner) {
     session.reset(false);
     var match = new DemoSession.Match();
     match.id = "conversation-match";
@@ -44,97 +65,32 @@ class ConversationContinuationTest {
     match.players.put(owner.equals("luz") ? "nico" : "luz", owner.equals("luz") ? "right" : "left");
     match.players.put("teo", "right");
     session.snapshot().matches.put(match.id, match);
-    String request = "Find me a competitive match this Thursday after work.";
-    var first = new AtomicBoolean(true);
-    var resumedWithContext = new AtomicBoolean(false);
-    doAnswer(
-            invocation -> {
-              ValidatedModelTurn turn = invocation.getArgument(0);
-              if (turn.state().mode().equals("chat")) {
-                if (first.getAndSet(false))
-                  return application.apply(
-                      new ValidatedModelTurn(
-                          turn.state(),
-                          new AgentDecision(
-                              "ask_owner",
-                              0,
-                              "",
-                              "",
-                              field,
-                              value,
-                              "Which broad area works for you?")));
-                resumedWithContext.set(
-                    turn.state().ownerText().contains(request)
-                        && turn.state().ownerText().contains(answer)
-                        && turn.state().lastAction().equals("conversation_answered"));
-              }
-              return invocation.callRealMethod();
-            })
-        .when(application)
-        .apply(any(ValidatedModelTurn.class));
-    String execution =
-        given()
-            .contentType("application/json")
-            .body(
-                Map.of(
-                    "ownerId", owner, "messageId", UUID.randomUUID().toString(), "text", request))
-            .post("/api/messages")
-            .then()
-            .statusCode(200)
-            .extract()
-            .path("executionId");
-    var question = TopologyTest.awaitPending(owner);
-    assertEquals("conversation", question.get("kind"));
-    given()
-        .contentType("application/json")
-        .body(
-            Map.of(
-                "ownerId",
-                owner,
-                "messageId",
-                UUID.randomUUID().toString(),
-                "text",
-                answer,
-                "interactionId",
-                question.get("id")))
-        .post("/api/messages")
-        .then()
-        .statusCode(200);
-    Map<String, Object> approval = null;
-    for (int i = 0; i < 200; i++) {
-      List<Map<String, Object>> pending =
-          given().get("/api/owners/" + owner).then().statusCode(200).extract().path("pending");
-      if (!pending.isEmpty() && pending.getFirst().get("kind").equals("participation")) {
-        approval = pending.getFirst();
-        break;
+    return match;
+  }
+
+  private static String send(String owner, String text) {
+    return given().contentType("application/json")
+        .body(Map.of("ownerId", owner, "messageId", UUID.randomUUID().toString(), "text", text))
+        .post("/api/messages").then().statusCode(200).extract().path("executionId");
+  }
+
+  private static Map<String, Object> awaitParticipation(String owner, String execution) throws Exception {
+    for (int attempt = 0; attempt < 200; attempt++) {
+      List<Map<String, Object>> pending = given().get("/api/owners/" + owner)
+          .then().statusCode(200).extract().path("pending");
+      for (var review : pending) {
+        if (execution.equals(review.get("executionId"))
+            && "participation".equals(review.get("kind"))) return review;
       }
       Thread.sleep(50);
     }
-    assertNotNull(approval, "The resumed search must reach participation approval");
-    assertTrue(resumedWithContext.get());
-    assertEquals(execution, approval.get("executionId"));
-    assertEquals(3, match.players.size(), "A location answer cannot commit participation");
-    given()
-        .contentType("application/json")
-        .body(
-            Map.of(
-                "ownerId",
-                owner,
-                "messageId",
-                UUID.randomUUID().toString(),
-                "text",
-                "",
-                "interactionId",
-                approval.get("id"),
-                "choice",
-                "approve"))
-        .post("/api/messages")
-        .then()
-        .statusCode(200);
-    TopologyTest.awaitStatus(execution, "SUCCEEDED");
-    assertEquals("CONFIRMED", match.status);
-    assertEquals(4, match.players.size());
-    assertEquals(
-        1, session.snapshot().events.stream().filter(e -> e.type().equals("ROOT_STARTED")).count());
+    throw new AssertionError("The resumed search did not reach participation approval");
+  }
+
+  private static void approve(String owner, Map<String, Object> review) {
+    given().contentType("application/json")
+        .body(Map.of("ownerId", owner, "messageId", UUID.randomUUID().toString(),
+            "text", "", "interactionId", review.get("id"), "choice", "approve"))
+        .post("/api/messages").then().statusCode(200);
   }
 }

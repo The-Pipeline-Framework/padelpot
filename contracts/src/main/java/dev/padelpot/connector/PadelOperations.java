@@ -2,7 +2,6 @@ package dev.padelpot.connector;
 
 import dev.padelpot.domain.*;
 import org.pipelineframework.blocks.chat.ChatState;
-import org.pipelineframework.blocks.chat.ChatResult;
 
 public interface PadelOperations {
   ModelInput contextWithHistory(TurnState state);
@@ -12,7 +11,9 @@ public interface PadelOperations {
 
   CourtGuide courtGuide(CourtGuideRequest request);
 
-  Result acceptChatReply(ChatResult result);
+  Result acceptChatReply(OwnerReply reply);
+
+  TurnOutcome applyOwnerAction(OwnerAction action);
 
   TurnOutcome apply(ValidatedModelTurn turn);
 
