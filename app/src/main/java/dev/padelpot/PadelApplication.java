@@ -147,6 +147,8 @@ public class PadelApplication implements PadelOperations {
           terms +=
               "; fixed organizer time="
                   + m.hour
+                  + "; fixed organizer style="
+                  + m.style
                   + "; desired level="
                   + m.level
                   + "; vacancies="
@@ -157,6 +159,17 @@ public class PadelApplication implements PadelOperations {
                   + (2 - m.players.values().stream().filter("right"::equals).count())
                   + "; available team-side slots="
                   + Doubles.vacancies(m);
+        if (m != null && !s.actorId().equals(s.ownerId()))
+          terms +=
+              "; candidate offer="
+                  + s.hour()
+                  + ":00 "
+                  + s.style()
+                  + " on candidate's "
+                  + s.side()
+                  + " side; organizer already confirmed on "
+                  + m.players.getOrDefault(m.organizer, "unknown")
+                  + " side";
       }
       String task =
           s.mode().equals("chat")
@@ -172,13 +185,20 @@ public class PadelApplication implements PadelOperations {
                   + ". Do not restart onboarding. The fixed match needs four humans.";
       if (!s.mode().equals("chat") && !s.actorId().equals(s.ownerId()))
         task +=
-            ". Your owner is already confirmed. Evaluate the candidate offer; its court side"
-                + " belongs to the candidate, not your owner. The booking is fixed.";
+            ". Your owner is already confirmed on their own court side. The latest offer is for"
+                + " the CANDIDATE, not for your owner. In your decision, side is always the"
+                + " candidate's side. If the candidate offers the fixed time and style on a"
+                + " permitted vacant side, use accept with those exact candidate terms. This"
+                + " makes only a tentative agreement for the candidate to approve. Do not ask"
+                + " your owner to change sides or approve the candidate's side.";
       if (!s.mode().equals("chat") && s.actorId().equals(s.ownerId()))
         task +=
             ". Your owner requested a match search. Discovery selected this concrete opportunity."
                 + " You may make the first proposal without a peer message; no additional search"
-                + " permission is missing. Participation still needs a separate human approval.";
+                + " permission is missing. The posted match time and style cannot change; a"
+                + " personal preference for another time is not an offer for this match. Accept"
+                + " a compatible peer offer with its exact terms instead of repeating a proposal."
+                + " Participation still needs a separate human approval.";
       if (s.lastAction().equals("authority_confirmed"))
         task +=
             ". Your previous permission question was unnecessary: the supplied time and style are"

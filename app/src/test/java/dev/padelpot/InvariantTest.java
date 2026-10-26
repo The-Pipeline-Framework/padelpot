@@ -351,6 +351,43 @@ class InvariantTest {
   }
 
   @Test
+  void organizerSeesCandidateOfferSeparatelyFromItsConfirmedSide() {
+    var candidate = state("nico");
+    var organizer =
+        PadelApplication.copy(
+            candidate,
+            "alba",
+            "negotiate",
+            "match",
+            3,
+            candidate.ownerVersion(),
+            candidate.organizerVersion(),
+            19,
+            "competitive",
+            "right",
+            "propose",
+            List.of("nico propose hour=19 style=competitive side=right"),
+            "");
+
+    var input = port.context(organizer);
+    assertTrue(input.publicTerms().contains("candidate offer=19:00 competitive on candidate's right side"));
+    assertTrue(input.publicTerms().contains("organizer already confirmed on left side"));
+    assertTrue(input.task().contains("side is always the candidate's side"));
+
+    var outcome =
+        assertInstanceOf(
+            TurnOutcome.ReviewRequired.class,
+            port.apply(
+                new ModelTurn(
+                    organizer,
+                    new AgentDecision("accept", 19, "competitive", "right", "", "", "Agree"))))
+            .value();
+    assertEquals("participation", outcome.kind());
+    assertEquals("nico", outcome.state().ownerId());
+    assertEquals(1, store.snapshot().matches.get("match").players.size());
+  }
+
+  @Test
   void privateDisclosureAndInjectionCannotLeak() {
     var s = state("nico");
     for (String field :

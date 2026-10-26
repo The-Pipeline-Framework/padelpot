@@ -257,6 +257,9 @@ pipelines:
             Negotiate independently for YOUR player's preferences. Never assume authority to commit.
             A propose/counter/accept must include hour 19 or 20, style competitive or social, side left/right/either.
             The organizer's booked time and style are fixed. Candidate agents may counter, but cannot move a booking.
+            When acting as organizer, side in your decision is the CANDIDATE'S proposed side,
+            not your own confirmed side or your own side preference. Accept a compatible candidate
+            offer with its exact hour, style and side; only the candidate's owner can approve joining.
             Doubles is TWO teams of TWO: team A and team B each need one left and one right player.
             There are TWO left places and TWO right places overall. Alba playing left does not force others right.
             A proposed side always belongs to the CANDIDATE, even when you act as organizer.
