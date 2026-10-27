@@ -42,7 +42,8 @@ class ConversationContinuationTest {
 
     given().contentType("application/json")
         .body(Map.of("ownerId", "nico", "messageId", UUID.randomUUID().toString(),
-            "text", "I'm flexible", "interactionId", permission.get("id")))
+            "text", "I'm flexible", "interactionId", permission.get("id"),
+            "choice", "clarify"))
         .post("/api/messages").then().statusCode(200);
     Map<String, Object> approval = awaitParticipation("nico", execution);
     assertEquals(3, match.players.size(), "Time permission is not participation approval");

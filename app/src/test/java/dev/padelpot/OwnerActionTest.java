@@ -86,4 +86,19 @@ class OwnerActionTest {
             "application", "turn.apply", "{}", "COMMAND")))));
     assertTrue(session.snapshot().intents.isEmpty());
   }
+
+  @Test
+  void ownerActionCannotStartAnotherMatchDuringPendingReview() throws Exception {
+    ChatState state = state("alba:counter-1", "Could we switch to the right instead?")
+        .appendEvidence(new ChatEvidence("pending-review:review-1", "pending-interaction",
+            "Current live review: interactionId=review-1", Optional.empty()));
+    assertThrows(IllegalArgumentException.class, () -> ProjectOwnerChat.project(
+        ChatResult.handedOff(new ChatHandoff(state, new ChatProposal(
+            "application", "unknown.command",
+            "{}", "COMMAND")))));
+    OwnerAction other = new OwnerAction(state.messageId(), "alba", state.message(),
+        "find", 0, "", "", "", "", "Start another search");
+    assertInstanceOf(OwnerChatPath.Reply.class,
+        ProjectOwnerChat.project(handoff(state, other)));
+  }
 }

@@ -1276,6 +1276,19 @@
         "nullMarkerNumber" : null,
         "nullMarkerProtoName" : null
       }, {
+        "number" : 4,
+        "name" : "pendingInteractionId",
+        "protoName" : "pending_interaction_id",
+        "type" : "string",
+        "presence" : "REQUIRED",
+        "nullability" : "NON_NULL",
+        "constraints" : {
+          "minItems" : null,
+          "maxItems" : null
+        },
+        "nullMarkerNumber" : null,
+        "nullMarkerProtoName" : null
+      }, {
         "number" : 2,
         "name" : "requestId",
         "protoName" : "request_id",
@@ -1614,8 +1627,8 @@
         "protoName" : "reply",
         "number" : 2
       } ],
-      "reservedNumbers" : [ ],
-      "reservedNames" : [ ],
+      "reservedNumbers" : [ 3 ],
+      "reservedNames" : [ "counter" ],
       "constraints" : {
         "minLength" : null,
         "maxLength" : null,

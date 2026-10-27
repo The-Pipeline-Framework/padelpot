@@ -12,6 +12,8 @@ let selected = "alba",
   lastDecision = "",
   executionStatuses = new Map();
 const decisionDrafts = new Map();
+const freshFindRequest =
+  "Find an existing open competitive doubles match for me now. Please start the search and negotiate within my saved preferences. I will separately approve participation.";
 const node = (tag, text, className) => {
   const el = document.createElement(tag);
   if (text !== undefined) el.textContent = text;
@@ -150,13 +152,18 @@ function renderWorking() {
   } else if (!working) $("working")?.remove();
   if (["FAILED", "DLQ"].includes(status) && !working) {
     if (!$("request-failure")) {
+      const expired = detail?.latestRequest?.errorCode === "AWAIT_TIMEOUT";
       const failure = node(
         "div",
-        "Your latest request failed. Open Agent activity to see what happened.",
+        expired
+          ? "That approval expired after 15 minutes. It cannot be resumed. Send a new request to try again."
+          : "Your latest request failed. A new message starts a fresh request; open Agent activity for details.",
         "bubble request-failure",
       );
       failure.id = "request-failure";
       failure.setAttribute("role", "status");
+      if (selected !== "alba" && !detail.pending.length)
+        failure.append(button("Start a new match search", () => send(freshFindRequest)));
       $("messages").append(failure);
     }
   } else $("request-failure")?.remove();
@@ -185,7 +192,7 @@ function renderDecision() {
   $("message").placeholder =
     !p || p.kind === "conversation"
       ? "Tell your agent what you have in mind…"
-      : "Reply approve, decline, or counter: your suggestion…";
+      : "Ask a question or propose different match terms…";
   if (!p) return;
   if (p.kind === "conversation") {
     container.append(
@@ -204,16 +211,24 @@ function renderDecision() {
     ),
     node("p", p.prompt),
   );
+  const counterOrClarification = p.kind === "clarify" || p.kind === "participation";
   const input = node("input");
-  input.placeholder = "Optional counterproposal or clarification";
-  input.maxLength = 1200;
-  input.setAttribute("aria-label", "Counterproposal or clarification");
-  const draftKey = selected + ":" + p.id;
-  input.value = decisionDrafts.get(draftKey) || "";
-  input.addEventListener("input", () =>
-    decisionDrafts.set(draftKey, input.value),
-  );
-  container.append(input);
+  if (counterOrClarification) {
+    input.placeholder = p.kind === "clarify"
+      ? "Answer this permission question or propose a counter"
+      : "Propose different match terms";
+    input.maxLength = 1200;
+    input.setAttribute("aria-label", input.placeholder);
+    const draftKey = selected + ":" + p.id;
+    input.value = decisionDrafts.get(draftKey) || "";
+    input.addEventListener("input", () =>
+      decisionDrafts.set(draftKey, input.value),
+    );
+    container.append(input);
+  } else {
+    container.append(node("p",
+      "Questions go in the chat below. They leave this approval open."));
+  }
   const actions = node("div", undefined, "actions");
   actions.append(
     button(
@@ -228,11 +243,6 @@ function renderDecision() {
       "primary",
     ),
     button("Decline", () => reply(p, "reject", "")),
-    button("Counter", () => {
-      if (!input.value.trim())
-        return error(Error("Write your counterproposal above."));
-      reply(p, "counter", input.value.trim());
-    }),
   );
   if (p.kind === "clarify")
     actions.append(
@@ -240,6 +250,11 @@ function renderDecision() {
         reply(p, "clarify", input.value.trim()),
       ),
     );
+  if (counterOrClarification)
+    actions.append(button("Counter", () => {
+      if (!input.value.trim()) return error(Error("Write your counterproposal above."));
+      reply(p, "counter", input.value.trim());
+    }));
   container.append(actions);
   for (const b of actions.children) b.disabled = busy;
 }
@@ -258,7 +273,7 @@ function renderSuggestions() {
       : [
           [
             "Find me a match",
-            "Find me a competitive match this Thursday after work.",
+            freshFindRequest,
           ],
         ];
   chips.push([
@@ -282,7 +297,7 @@ function renderSuggestions() {
 async function send(text) {
   if (busy) return;
   const question = detail?.pending[0];
-  if (question) {
+  if (question?.kind === "conversation") {
     if (await reply(question, null, text)) {
       $("message").value = "";
       fitComposer();
@@ -299,6 +314,7 @@ async function send(text) {
       ownerId: selected,
       messageId: crypto.randomUUID(),
       text,
+      ...(question ? { interactionId: question.id } : {}),
     });
     $("message").value = "";
     fitComposer();

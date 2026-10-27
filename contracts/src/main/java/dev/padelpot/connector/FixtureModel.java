@@ -55,7 +55,11 @@ public class FixtureModel extends LlmQueryConnectorProvider {
                       return CompletableFuture.completedFuture(new LlmDecision(
                           new LlmToolProposal("court_guide", "{\"topic\":\"court\"}")));
                     }
-                    String answer = message.contains("match")
+                    String answer = message.contains("lift")
+                        ? "I cannot arrange a lift to the club."
+                        : message.contains("joke")
+                        ? "I can help with padel and match questions, not unrelated requests."
+                        : message.contains("match")
                         ? "Would you like me to open a new match or find one to join?"
                         : "I can help with padel questions and match requests.";
                     for (JsonNode entry : n.path("context")) {

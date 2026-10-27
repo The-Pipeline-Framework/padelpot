@@ -3,6 +3,7 @@ package dev.padelpot;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.padelpot.domain.*;
+import dev.padelpot.persistence.AggregateQueries;
 import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.*;
@@ -347,6 +348,88 @@ class InvariantTest {
             new ModelTurn(
                 s, new AgentDecision("accept", 19, "competitive", "right", "", "", "I accept")));
     assertInstanceOf(TurnOutcome.ReviewRequired.class, o);
+    assertEquals(1, store.snapshot().matches.get("match").players.size());
+  }
+
+  @Test
+  void expiredOwnerIntentIsCarriedIntoOnlyThatOwnersNextConversation() {
+    port.aggregates =
+        new AggregateQueries() {
+          @Override
+          public List<HistoryTurn> recentHistory(
+              String tenantId, String ownerId, String currentRequestId, int limit) {
+            return ownerId.equals("nico")
+                ? List.of(
+                    new HistoryTurn(
+                        1, "prior-review", "agent", "Approve participation?", "2026-10-26T19:20:00Z"))
+                : List.of();
+          }
+        };
+    var expired = new DemoSession.Intent();
+    expired.requestId = "nico:expired";
+    expired.ownerId = "nico";
+    expired.deadline = System.currentTimeMillis() - 1;
+    store.snapshot().intents.put(expired.requestId, expired);
+    store.player("nico").chat.clear();
+
+    var nico = port.chatContext(new ChatIngress("nico:fresh", "nico", "Do I need to start over?", ""));
+    assertTrue(
+        nico.evidence().stream()
+            .anyMatch(
+                evidence ->
+                    evidence.provenance().equals("application-status")
+                        && evidence.text().contains("cannot be resumed")));
+    assertTrue(
+        nico.evidence().stream()
+            .anyMatch(
+                evidence ->
+                    evidence.provenance().equals("application-capabilities")
+                        && evidence.text().contains("saved history are historical")));
+    var alba = port.chatContext(new ChatIngress("alba:fresh", "alba", "What happened?", ""));
+    assertTrue(
+        alba.evidence().stream()
+            .noneMatch(evidence -> evidence.provenance().equals("application-status")));
+    store.message("nico", "agent", "A new request can begin now.");
+    var later = port.chatContext(new ChatIngress("nico:later", "nico", "Find again.", ""));
+    assertTrue(
+        later.evidence().stream()
+            .noneMatch(evidence -> evidence.provenance().equals("application-status")));
+  }
+
+  @Test
+  void organizerSeesCandidateOfferSeparatelyFromItsConfirmedSide() {
+    var candidate = state("nico");
+    var organizer =
+        PadelApplication.copy(
+            candidate,
+            "alba",
+            "negotiate",
+            "match",
+            3,
+            candidate.ownerVersion(),
+            candidate.organizerVersion(),
+            19,
+            "competitive",
+            "right",
+            "propose",
+            List.of("nico propose hour=19 style=competitive side=right"),
+            "");
+
+    var input = port.context(organizer);
+    assertTrue(input.publicTerms().contains("candidate offer=19:00 competitive on candidate's right side"));
+    assertTrue(input.publicTerms().contains("organizer already confirmed on left side"));
+    assertTrue(input.task().contains("side is always the candidate's side"));
+
+    var outcome =
+        assertInstanceOf(
+            TurnOutcome.ReviewRequired.class,
+            port.apply(
+                new ModelTurn(
+                    organizer,
+                    new AgentDecision("accept", 19, "competitive", "right", "", "", "Agree"))))
+            .value();
+    assertEquals("participation", outcome.kind());
+    assertEquals("nico", outcome.state().ownerId());
     assertEquals(1, store.snapshot().matches.get("match").players.size());
   }
 

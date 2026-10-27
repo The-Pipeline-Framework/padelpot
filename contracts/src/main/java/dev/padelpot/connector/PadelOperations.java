@@ -1,6 +1,7 @@
 package dev.padelpot.connector;
 
 import dev.padelpot.domain.*;
+import java.util.concurrent.CompletionStage;
 import org.pipelineframework.blocks.chat.ChatState;
 
 public interface PadelOperations {

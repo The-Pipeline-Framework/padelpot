@@ -30,8 +30,13 @@ public class ProjectOwnerChat implements ReactiveService<ChatResult, OwnerChatPa
           || !scope.ownerId().equals(scope.conversationId())
           || !reply.messageId().startsWith(scope.ownerId() + ":"))
         throw new IllegalArgumentException("Chat reply scope does not match the authorised owner");
-      return new OwnerChatPath.Reply(new OwnerReply(
-          reply.messageId(), scope.ownerId(), reply.text()));
+      boolean pendingReview = reply.proposedNextState().evidence().stream()
+          .anyMatch(evidence -> evidence.provenance().equals("pending-interaction"));
+      String text = pendingReview
+          ? reply.text() + " The court side and other proposed terms remain as shown in the"
+              + " pending offer; nothing has been approved or changed."
+          : reply.text();
+      return new OwnerChatPath.Reply(new OwnerReply(reply.messageId(), scope.ownerId(), text));
     }
     ChatHandoff handoff = result.handoff().orElseThrow();
     ChatState state = handoff.state();
@@ -40,11 +45,17 @@ public class ProjectOwnerChat implements ReactiveService<ChatResult, OwnerChatPa
         || !state.scope().ownerId().equals(state.scope().conversationId())
         || !state.messageId().startsWith(state.scope().ownerId() + ":")
         || !"application".equals(proposal.binding())
-        || !"owner.action.apply".equals(proposal.operation())
         || !"COMMAND".equals(proposal.kind())
         || proposal.argumentsJson().getBytes(StandardCharsets.UTF_8).length > 4096) {
       throw new IllegalArgumentException("Chat handoff is outside the authorized owner action contract");
     }
+    if (!"owner.action.apply".equals(proposal.operation()))
+      throw new IllegalArgumentException("Chat handoff uses an unknown application operation");
+    if (state.evidence().stream().anyMatch(evidence ->
+        evidence.provenance().equals("pending-interaction")))
+      return new OwnerChatPath.Reply(new OwnerReply(state.messageId(), state.scope().ownerId(),
+          "You have a pending decision. Please approve, counter or decline it before starting another"
+              + " match request; I can answer questions without changing that decision."));
     OwnerAction action;
     try {
       action = PipelineJson.mapper().readValue(proposal.argumentsJson(), OwnerAction.class);

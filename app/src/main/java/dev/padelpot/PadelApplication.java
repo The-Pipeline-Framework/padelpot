@@ -11,6 +11,7 @@ import java.time.*;
 import java.util.*;
 import org.pipelineframework.blocks.chat.ChatEvidence;
 import org.pipelineframework.blocks.chat.ChatState;
+import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.connector.conversation.ConversationScope;
 
 @ApplicationScoped
@@ -18,12 +19,14 @@ public class PadelApplication implements PadelOperations {
   @Inject DemoSession store;
 
   @Inject dev.padelpot.persistence.AggregateQueries aggregates;
+  @Inject PipelineExecutionService pipeline;
 
   /** One authorized hydration supplies history and permitted player facts before the Block decides. */
   public ChatState chatContext(ChatIngress ingress) {
     if (!ingress.requestId().startsWith(ingress.ownerId() + ":"))
       throw new IllegalArgumentException("Chat request ID does not match the authorized owner");
     String playerBrief;
+    boolean expiredUnfinishedIntent;
     synchronized (store) {
       var owner = store.player(ingress.ownerId());
       var state = new TurnState(
@@ -31,6 +34,27 @@ public class PadelApplication implements PadelOperations {
           System.currentTimeMillis() + 900_000, owner.version, 0L, 19,
           "competitive", Doubles.preferredSide(owner), "", List.of(), ingress.text(), "");
       playerBrief = context(state).playerBrief();
+      expiredUnfinishedIntent =
+          store.snapshot().intents.values().stream()
+              .filter(intent -> intent.ownerId.equals(ingress.ownerId()) && !intent.cancelled)
+              .filter(
+                  intent ->
+                      store.snapshot().events.stream()
+                          .noneMatch(
+                              event ->
+                                  event.type().equals("OWNER_RESULT")
+                                      && intent.requestId.equals(event.data().get("requestId"))))
+              .max(Comparator.comparingLong(intent -> intent.deadline))
+              .filter(
+                  intent ->
+                      intent.deadline <= System.currentTimeMillis()
+                          && owner.chat.stream()
+                              .noneMatch(
+                                  message ->
+                                      message.role().equals("agent")
+                                          && Instant.parse(message.time()).toEpochMilli()
+                                              > intent.deadline))
+              .isPresent();
     }
     var scope = new ConversationScope("padelpot-demo", ingress.ownerId(), ingress.ownerId());
     var saved = aggregates.recentHistory(scope.tenantId(), scope.ownerId(), ingress.requestId(), 64);
@@ -56,7 +80,54 @@ public class PadelApplication implements PadelOperations {
             + "new match terms. Use 0 and empty strings for fields unused by the selected kind. "
             + "PadelPot can also propose one profile preference or one inferred preference from "
             + "played-match feedback. Ask a natural clarifying question when an intended action "
-            + "or required term is unclear. A proposal never grants participation or approval.", Optional.empty()));
+            + "or required term is unclear. A proposal never grants participation or approval. "
+            + "Approval questions in saved history are historical, not live Await interactions. "
+            + "Only a separately supplied live pending review can be countered; if asked to resume "
+            + "an old question, explain that the owner must start a fresh explicit request. "
+            + "Never propose approval through "
+            + "owner_action.", Optional.empty()));
+    state = state.appendEvidence(new ChatEvidence(
+        "scope:" + ingress.requestId(), "application-scope",
+        "Help with this fictional padel demo: match search, negotiation, preferences and public court"
+            + " guidance. Briefly decline unrelated requests and offer to return to padel. PadelPot"
+            + " cannot arrange lifts, share another player's contact or location, book a real court,"
+            + " or promise an external service. Address every distinct part of a mixed message; do"
+            + " not silently drop a question. A discussion never approves participation.", Optional.empty()));
+    if (!ingress.pendingInteractionId().isBlank()) {
+      var pending = pipeline.queryPendingAwaitInteractions(
+              scope.tenantId(), "", "", "", 100)
+          .await().indefinitely().stream()
+          .filter(interaction -> ingress.pendingInteractionId().equals(interaction.interactionId()))
+          .findFirst();
+      if (pending.isPresent()) {
+        Review review = Review.class.cast(pending.orElseThrow().requestPayload());
+        if (!ingress.ownerId().equals(review.state().ownerId()))
+          throw new IllegalArgumentException("Pending review belongs to another owner");
+        state = state.appendEvidence(new ChatEvidence(
+            "pending-review:" + ingress.pendingInteractionId(), "pending-interaction",
+            "Current live review for this owner: interactionId="
+                + ingress.pendingInteractionId() + "; kind=" + review.kind() + "; question="
+                + review.prompt() + "; field=" + review.field() + "; value=" + review.value()
+                + ". This review is still waiting. A natural reply leaves it open. Approve,"
+                + " Decline and Counter require explicit controls. If the message asks a separate"
+                + " question, answer it and leave the review open. When the owner agrees"
+                + " to one offered term while asking something else, acknowledge that term and"
+                + " answer the other request. The review still needs explicit approval. Never"
+                + " treat agreement on a court side as participation approval.", Optional.empty()));
+      } else {
+        state = state.appendEvidence(new ChatEvidence(
+            "stale-review:" + ingress.requestId(), "application-status",
+            "The referenced review is no longer pending. It cannot be approved or countered;"
+                + " explain that a fresh request may be needed.", Optional.empty()));
+      }
+    }
+    if (expiredUnfinishedIntent)
+      state = state.appendEvidence(new ChatEvidence(
+          "expired-intent:" + ingress.requestId(), "application-status",
+          "The owner's previous match request expired before it completed. Its approval question"
+              + " cannot be resumed or answered now. If the owner asks what happened, explain"
+              + " that a new explicit open or find request is needed. Do not propose approval"
+              + " or imply that the owner joined the match.", Optional.empty()));
     return state;
   }
 
@@ -147,6 +218,8 @@ public class PadelApplication implements PadelOperations {
           terms +=
               "; fixed organizer time="
                   + m.hour
+                  + "; fixed organizer style="
+                  + m.style
                   + "; desired level="
                   + m.level
                   + "; vacancies="
@@ -157,6 +230,17 @@ public class PadelApplication implements PadelOperations {
                   + (2 - m.players.values().stream().filter("right"::equals).count())
                   + "; available team-side slots="
                   + Doubles.vacancies(m);
+        if (m != null && !s.actorId().equals(s.ownerId()))
+          terms +=
+              "; candidate offer="
+                  + s.hour()
+                  + ":00 "
+                  + s.style()
+                  + " on candidate's "
+                  + s.side()
+                  + " side; organizer already confirmed on "
+                  + m.players.getOrDefault(m.organizer, "unknown")
+                  + " side";
       }
       String task =
           s.mode().equals("chat")
@@ -172,13 +256,20 @@ public class PadelApplication implements PadelOperations {
                   + ". Do not restart onboarding. The fixed match needs four humans.";
       if (!s.mode().equals("chat") && !s.actorId().equals(s.ownerId()))
         task +=
-            ". Your owner is already confirmed. Evaluate the candidate offer; its court side"
-                + " belongs to the candidate, not your owner. The booking is fixed.";
+            ". Your owner is already confirmed on their own court side. The latest offer is for"
+                + " the CANDIDATE, not for your owner. In your decision, side is always the"
+                + " candidate's side. If the candidate offers the fixed time and style on a"
+                + " permitted vacant side, use accept with those exact candidate terms. This"
+                + " makes only a tentative agreement for the candidate to approve. Do not ask"
+                + " your owner to change sides or approve the candidate's side.";
       if (!s.mode().equals("chat") && s.actorId().equals(s.ownerId()))
         task +=
             ". Your owner requested a match search. Discovery selected this concrete opportunity."
                 + " You may make the first proposal without a peer message; no additional search"
-                + " permission is missing. Participation still needs a separate human approval.";
+                + " permission is missing. The posted match time and style cannot change; a"
+                + " personal preference for another time is not an offer for this match. Accept"
+                + " a compatible peer offer with its exact terms instead of repeating a proposal."
+                + " Participation still needs a separate human approval.";
       if (s.lastAction().equals("authority_confirmed"))
         task +=
             ". Your previous permission question was unnecessary: the supplied time and style are"

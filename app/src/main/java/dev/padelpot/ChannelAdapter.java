@@ -38,6 +38,7 @@ public class ChannelAdapter {
     synchronized (store) {
       PlayerCheck(msg.ownerId());
     }
+    String pendingContextId = "";
     if (msg.interactionId() != null && !msg.interactionId().isBlank()) {
       var pending =
           pipeline
@@ -47,54 +48,62 @@ public class ChannelAdapter {
               .stream()
               .filter(i -> i.interactionId().equals(msg.interactionId()))
               .findFirst();
-      if (pending.isEmpty())
+      if (pending.isEmpty() && msg.choice() != null)
         throw new WebApplicationException(
             "This decision has completed or expired. Refresh your chat.", 409);
-      // TPF's generic interaction API erases the payload type at this external boundary.
-      Review review = Review.class.cast(pending.get().requestPayload());
-      if (!review.state().ownerId().equals(msg.ownerId()))
-        throw new ForbiddenException("This interaction belongs to another owner");
-      AnsweredReview reply;
-      try {
-        reply =
-            msg.choice() == null
-                ? new OwnerProjector().fromText(review, msg.text(), msg.ownerId())
-                : new OwnerProjector()
-                    .project(review, new HumanAnswer(msg.choice(), msg.text()), msg.ownerId());
-      } catch (IllegalArgumentException e) {
-        throw new BadRequestException(
-            jakarta.ws.rs.core.Response.status(400)
-                .entity(Map.of("message", e.getMessage()))
-                .build());
-      }
-      var result =
-          pipeline
-              .completeAwaitInteraction(
-                  new AwaitCompletionCommand(
-                      TENANT,
-                      msg.interactionId(),
-                      null,
-                      null,
-                      msg.messageId(),
-                      reply,
-                      msg.ownerId(),
-                      System.currentTimeMillis()))
-              .await()
-              .indefinitely();
-      synchronized (store) {
-        String delivery =
-            "reply:" + msg.ownerId() + ":" + msg.interactionId() + ":" + msg.messageId();
-        if (store.snapshot().applied.add(delivery)) {
-          store.message(
-              msg.ownerId(),
-              "owner",
-              msg.choice() == null
-                  ? msg.text()
-                  : msg.choice() + (msg.text().isBlank() ? "" : ": " + msg.text()));
+      if (pending.isPresent()) {
+        // TPF's generic interaction API erases the payload type at this external boundary.
+        Review review = Review.class.cast(pending.orElseThrow().requestPayload());
+        if (!review.state().ownerId().equals(msg.ownerId()))
+          throw new ForbiddenException("This interaction belongs to another owner");
+        if (msg.choice() != null || review.kind().equals("conversation")) {
+          AnsweredReview reply;
+          try {
+            reply =
+                msg.choice() == null
+                    || ("clarify".equals(msg.choice()) && review.kind().equals("clarify"))
+                    ? new OwnerProjector().fromText(review, msg.text(), msg.ownerId())
+                    : new OwnerProjector()
+                        .project(review, new HumanAnswer(msg.choice(), msg.text()), msg.ownerId());
+          } catch (IllegalArgumentException e) {
+            throw new BadRequestException(
+                jakarta.ws.rs.core.Response.status(400)
+                    .entity(Map.of("message", e.getMessage()))
+                    .build());
+          }
+          var result =
+              pipeline
+                  .completeAwaitInteraction(
+                      new AwaitCompletionCommand(
+                          TENANT,
+                          msg.interactionId(),
+                          null,
+                          null,
+                          msg.messageId(),
+                          reply,
+                          msg.ownerId(),
+                          System.currentTimeMillis()))
+                  .await()
+                  .indefinitely();
+          synchronized (store) {
+            String delivery =
+                "reply:" + msg.ownerId() + ":" + msg.interactionId() + ":" + msg.messageId();
+            if (store.snapshot().applied.add(delivery)) {
+              store.message(
+                  msg.ownerId(),
+                  "owner",
+                  msg.choice() == null
+                      ? msg.text()
+                      : msg.choice() + (msg.text().isBlank() ? "" : ": " + msg.text()));
+            }
+          }
+          return result;
         }
+        pendingContextId = pending.orElseThrow().interactionId();
       }
-      return result;
     }
+    if (msg.choice() != null)
+      throw new BadRequestException("An explicit decision requires a pending interaction");
     if (msg.text().isBlank())
       throw new BadRequestException("A new message requires bounded text");
     String requestId = msg.ownerId() + ":" + msg.messageId();
@@ -102,7 +111,8 @@ public class ChannelAdapter {
     RunAsyncAcceptedDto accepted =
         pipeline
             .executePipelineAsync(
-                new OwnerAdmission.Chat(new ChatIngress(requestId, msg.ownerId(), msg.text())),
+                new OwnerAdmission.Chat(new ChatIngress(
+                    requestId, msg.ownerId(), msg.text(), pendingContextId)),
                 TENANT,
                 requestId,
                 false)
@@ -174,7 +184,13 @@ public class ChannelAdapter {
     if (!latestExecution.isBlank()) {
       try {
         var status = pipeline.getExecutionStatus(TENANT, latestExecution).await().indefinitely();
-        latestRequest = Map.of("executionId", latestExecution, "status", status.status().name());
+        latestRequest =
+            status.errorCode() == null
+                ? Map.of("executionId", latestExecution, "status", status.status().name())
+                : Map.of(
+                    "executionId", latestExecution,
+                    "status", status.status().name(),
+                    "errorCode", status.errorCode());
       } catch (NotFoundException historical) {
         // Business participations can outlive memory-backed execution history.
       }
