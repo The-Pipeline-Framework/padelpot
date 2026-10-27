@@ -30,6 +30,20 @@ public class FixtureModel extends LlmQueryConnectorProvider {
                   JsonNode n = new ObjectMapper().readTree(r.applicationStateJson());
                   if (n.has("message") && n.has("context")) {
                     String message = n.path("message").asText().toLowerCase(Locale.ROOT);
+                    String pendingReview = "";
+                    for (JsonNode entry : n.path("context")) {
+                      if (entry.path("provenance").asText().equals("pending-interaction"))
+                        pendingReview = entry.path("text").asText();
+                    }
+                    if (!pendingReview.isBlank()
+                        && r.tools().stream().anyMatch(tool -> tool.alias().equals("pending_counter"))
+                        && message.contains("switch to the right") && !message.contains("lift")) {
+                      String interactionId = pendingReview.split("interactionId=", 2)[1].split(";", 2)[0];
+                      return CompletableFuture.completedFuture(new LlmDecision(
+                          new LlmToolProposal("pending_counter", new ObjectMapper().writeValueAsString(
+                              Map.of("interactionId", interactionId,
+                                  "counterText", n.path("message").asText())))));
+                    }
                     if (r.tools().stream().anyMatch(tool -> tool.alias().equals("owner_action"))) {
                       String kind = message.contains("open") || message.contains("host")
                           || message.contains("create") ? "open"
@@ -55,7 +69,12 @@ public class FixtureModel extends LlmQueryConnectorProvider {
                       return CompletableFuture.completedFuture(new LlmDecision(
                           new LlmToolProposal("court_guide", "{\"topic\":\"court\"}")));
                     }
-                    String answer = message.contains("match")
+                    String answer = message.contains("lift")
+                        ? "Left is the proposed side, but I cannot arrange a lift. Your participation"
+                            + " still needs explicit approval."
+                        : message.contains("joke")
+                        ? "I can help with padel and match questions, not unrelated requests."
+                        : message.contains("match")
                         ? "Would you like me to open a new match or find one to join?"
                         : "I can help with padel questions and match requests.";
                     for (JsonNode entry : n.path("context")) {

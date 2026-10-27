@@ -21,11 +21,13 @@ public class ChatIngressMapper implements Mapper<ChatIngress, ApprovedTurnEntity
     entity.text = ingress.text();
     entity.status = "CHAT_INPUT";
     entity.matchId = "";
+    entity.pendingInteractionId = ingress.pendingInteractionId();
     return entity;
   }
 
   @Override
   public ChatIngress fromExternal(ApprovedTurnEntity entity) {
-    return new ChatIngress(entity.requestId, entity.ownerId, entity.text);
+    return new ChatIngress(entity.requestId, entity.ownerId, entity.text,
+        entity.pendingInteractionId == null ? "" : entity.pendingInteractionId);
   }
 }

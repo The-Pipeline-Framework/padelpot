@@ -1,6 +1,7 @@
 package dev.padelpot.connector;
 
 import dev.padelpot.domain.*;
+import java.util.concurrent.CompletionStage;
 import org.pipelineframework.blocks.chat.ChatState;
 
 public interface PadelOperations {
@@ -14,6 +15,8 @@ public interface PadelOperations {
   Result acceptChatReply(OwnerReply reply);
 
   TurnOutcome applyOwnerAction(OwnerAction action);
+
+  CompletionStage<Result> submitPendingCounter(PendingCounter counter);
 
   TurnOutcome apply(ValidatedModelTurn turn);
 

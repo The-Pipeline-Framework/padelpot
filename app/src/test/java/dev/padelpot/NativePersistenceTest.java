@@ -136,7 +136,7 @@ class NativePersistenceTest {
     for (String kind : List.of("clarify", "participation")) {
       var pending = TopologyTest.awaitPending("nico");
       assertEquals(kind, pending.get("kind"));
-      given()
+      String discussion = given()
           .contentType("application/json")
           .body(
               Map.of(
@@ -150,8 +150,9 @@ class NativePersistenceTest {
                   "yes but only at 20:00"))
           .post("/api/messages")
           .then()
-          .statusCode(400)
-          .body("message", org.hamcrest.Matchers.containsString("pending question remains open"));
+          .statusCode(200)
+          .extract().path("executionId");
+      TopologyTest.awaitStatus(discussion, "SUCCEEDED");
       assertEquals(pending.get("id"), TopologyTest.awaitPending("nico").get("id"));
       assertEquals(1, match.players.size(), "An ambiguous answer cannot reserve a place");
       given()
@@ -164,6 +165,8 @@ class NativePersistenceTest {
                   UUID.randomUUID().toString(),
                   "interactionId",
                   pending.get("id"),
+                  "choice",
+                  "approve",
                   "text",
                   kind.equals("clarify") ? "I'm flexible" : "approve"))
           .post("/api/messages")

@@ -372,7 +372,7 @@ class InvariantTest {
     store.snapshot().intents.put(expired.requestId, expired);
     store.player("nico").chat.clear();
 
-    var nico = port.chatContext(new ChatIngress("nico:fresh", "nico", "Do I need to start over?"));
+    var nico = port.chatContext(new ChatIngress("nico:fresh", "nico", "Do I need to start over?", ""));
     assertTrue(
         nico.evidence().stream()
             .anyMatch(
@@ -385,12 +385,12 @@ class InvariantTest {
                 evidence ->
                     evidence.provenance().equals("application-capabilities")
                         && evidence.text().contains("saved history are historical")));
-    var alba = port.chatContext(new ChatIngress("alba:fresh", "alba", "What happened?"));
+    var alba = port.chatContext(new ChatIngress("alba:fresh", "alba", "What happened?", ""));
     assertTrue(
         alba.evidence().stream()
             .noneMatch(evidence -> evidence.provenance().equals("application-status")));
     store.message("nico", "agent", "A new request can begin now.");
-    var later = port.chatContext(new ChatIngress("nico:later", "nico", "Find again."));
+    var later = port.chatContext(new ChatIngress("nico:later", "nico", "Find again.", ""));
     assertTrue(
         later.evidence().stream()
             .noneMatch(evidence -> evidence.provenance().equals("application-status")));

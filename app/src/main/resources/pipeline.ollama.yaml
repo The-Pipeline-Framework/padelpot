@@ -126,7 +126,7 @@ types:
     fields: [[requestId, string], [tenantId, string], [ownerId, string]]
   ChatIngress:
     java: dev.padelpot.domain.ChatIngress
-    fields: [[requestId, string], [ownerId, string], [text, string]]
+    fields: [[requestId, string], [ownerId, string], [text, string], [pendingInteractionId, string]]
     mappings:
       persistence:
         type: dev.padelpot.persistence.ApprovedTurnEntity
@@ -150,11 +150,19 @@ types:
       - [field, string]
       - [value, string]
       - [explanation, string]
+  PendingCounter:
+    java: dev.padelpot.domain.PendingCounter
+    fields:
+      - [requestId, string]
+      - [ownerId, string]
+      - [ownerText, string]
+      - [interactionId, string]
+      - [counterText, string]
   OwnerReply:
     fields: [[messageId, string], [ownerId, string], [text, string]]
   OwnerChatPath:
     java: dev.padelpot.domain.OwnerChatPath
-    variants: { reply: OwnerReply, action: OwnerAction }
+    variants: { reply: OwnerReply, action: OwnerAction, counter: PendingCounter }
   AnsweredReview:
     java: dev.padelpot.domain.AnsweredReview
     fields:
@@ -212,6 +220,13 @@ blockBindings:
         input: OwnerAction
         trustedArguments: { requestId: state.messageId, ownerId: state.scope.ownerId, ownerText: state.message }
         config: { label: proposed-owner-action }
+      pending_counter:
+        using: application
+        operation: review.counter.submit
+        kind: command
+        input: PendingCounter
+        trustedArguments: { requestId: state.messageId, ownerId: state.scope.ownerId, ownerText: state.message }
+        config: { label: proposed-review-counter }
 pipelines:
   personal-agent:
     input: TurnState
@@ -408,6 +423,21 @@ steps:
     java:
       input: dev.padelpot.domain.OwnerAction
       output: dev.padelpot.domain.TurnOutcome
+  - name: Submit pending counter
+    kind: command
+    cardinality: ONE_TO_ONE
+    input: OwnerChatPath
+    accepts: [PendingCounter]
+    output: Result
+    using: application
+    operation: review.counter.submit
+    operationVersion: 1
+    config: { label: authoritative-review-counter }
+    commandIdGenerator: dev.padelpot.PendingCounterCommandId
+    duplicatePolicy: RETURN_RECORDED
+    java:
+      input: dev.padelpot.domain.PendingCounter
+      output: dev.padelpot.domain.Result
   - name: Run negotiating agent after owner action
     pipeline: personal-agent
     cardinality: ONE_TO_ONE

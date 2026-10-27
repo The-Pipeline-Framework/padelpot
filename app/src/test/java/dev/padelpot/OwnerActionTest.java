@@ -3,6 +3,7 @@ package dev.padelpot;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.padelpot.domain.OwnerAction;
+import dev.padelpot.domain.PendingCounter;
 import dev.padelpot.domain.OwnerChatPath;
 import dev.padelpot.domain.Review;
 import dev.padelpot.domain.TurnOutcome;
@@ -85,5 +86,29 @@ class OwnerActionTest {
         ChatResult.handedOff(new ChatHandoff(state, new ChatProposal(
             "application", "turn.apply", "{}", "COMMAND")))));
     assertTrue(session.snapshot().intents.isEmpty());
+  }
+
+  @Test
+  void counterHandoffRequiresTheCarriedLiveReviewAndExactOwnerText() throws Exception {
+    ChatState state = state("alba:counter-1", "Could we switch to the right instead?")
+        .appendEvidence(new ChatEvidence("pending-review:review-1", "pending-interaction",
+            "Current live review: interactionId=review-1", Optional.empty()));
+    PendingCounter valid = new PendingCounter(state.messageId(), "alba", state.message(),
+        "review-1", "switch to the right instead?");
+    var proposal = new ChatProposal("application", "review.counter.submit",
+        PipelineJson.mapper().writeValueAsString(valid), "COMMAND");
+    assertEquals(valid, assertInstanceOf(OwnerChatPath.Counter.class,
+        ProjectOwnerChat.project(ChatResult.handedOff(new ChatHandoff(state, proposal)))).value());
+
+    PendingCounter forged = new PendingCounter(state.messageId(), "alba", state.message(),
+        "review-2", valid.counterText());
+    assertThrows(IllegalArgumentException.class, () -> ProjectOwnerChat.project(
+        ChatResult.handedOff(new ChatHandoff(state, new ChatProposal(
+            "application", "review.counter.submit",
+            PipelineJson.mapper().writeValueAsString(forged), "COMMAND")))));
+    OwnerAction other = new OwnerAction(state.messageId(), "alba", state.message(),
+        "find", 0, "", "", "", "", "Start another search");
+    assertInstanceOf(OwnerChatPath.Reply.class,
+        ProjectOwnerChat.project(handoff(state, other)));
   }
 }

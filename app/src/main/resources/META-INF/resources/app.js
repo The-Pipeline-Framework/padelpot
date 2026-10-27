@@ -192,7 +192,7 @@ function renderDecision() {
   $("message").placeholder =
     !p || p.kind === "conversation"
       ? "Tell your agent what you have in mind…"
-      : "Reply approve, decline, or counter: your suggestion…";
+      : "Ask a question or propose different match terms…";
   if (!p) return;
   if (p.kind === "conversation") {
     container.append(
@@ -212,15 +212,20 @@ function renderDecision() {
     node("p", p.prompt),
   );
   const input = node("input");
-  input.placeholder = "Optional counterproposal or clarification";
-  input.maxLength = 1200;
-  input.setAttribute("aria-label", "Counterproposal or clarification");
-  const draftKey = selected + ":" + p.id;
-  input.value = decisionDrafts.get(draftKey) || "";
-  input.addEventListener("input", () =>
-    decisionDrafts.set(draftKey, input.value),
-  );
-  container.append(input);
+  if (p.kind === "clarify") {
+    input.placeholder = "Answer this permission question";
+    input.maxLength = 1200;
+    input.setAttribute("aria-label", "Answer this permission question");
+    const draftKey = selected + ":" + p.id;
+    input.value = decisionDrafts.get(draftKey) || "";
+    input.addEventListener("input", () =>
+      decisionDrafts.set(draftKey, input.value),
+    );
+    container.append(input);
+  } else {
+    container.append(node("p",
+      "Questions and proposed changes go in the chat below. They leave this approval open."));
+  }
   const actions = node("div", undefined, "actions");
   actions.append(
     button(
@@ -235,11 +240,6 @@ function renderDecision() {
       "primary",
     ),
     button("Decline", () => reply(p, "reject", "")),
-    button("Counter", () => {
-      if (!input.value.trim())
-        return error(Error("Write your counterproposal above."));
-      reply(p, "counter", input.value.trim());
-    }),
   );
   if (p.kind === "clarify")
     actions.append(
@@ -289,7 +289,7 @@ function renderSuggestions() {
 async function send(text) {
   if (busy) return;
   const question = detail?.pending[0];
-  if (question) {
+  if (question?.kind === "conversation") {
     if (await reply(question, null, text)) {
       $("message").value = "";
       fitComposer();
@@ -306,6 +306,7 @@ async function send(text) {
       ownerId: selected,
       messageId: crypto.randomUUID(),
       text,
+      ...(question ? { interactionId: question.id } : {}),
     });
     $("message").value = "";
     fitComposer();
