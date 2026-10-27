@@ -99,7 +99,8 @@ class ChatAgentConsumptionTest {
     assertEquals(interactionId, TopologyTest.awaitPending("luz").get("id"));
     assertFalse(match.players.containsKey("luz"));
     assertTrue(session.player("luz").chat.stream().anyMatch(turn ->
-        turn.role().equals("agent") && turn.text().contains("cannot arrange a lift")));
+        turn.role().equals("agent") && turn.text().contains("cannot arrange a lift")
+            && turn.text().contains("nothing has been approved or changed")));
 
     String counter = sendWithReview("luz", interactionId,
         "Could we switch to the right instead?");

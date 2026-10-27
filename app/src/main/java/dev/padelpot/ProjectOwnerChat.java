@@ -31,8 +31,13 @@ public class ProjectOwnerChat implements ReactiveService<ChatResult, OwnerChatPa
           || !scope.ownerId().equals(scope.conversationId())
           || !reply.messageId().startsWith(scope.ownerId() + ":"))
         throw new IllegalArgumentException("Chat reply scope does not match the authorised owner");
-      return new OwnerChatPath.Reply(new OwnerReply(
-          reply.messageId(), scope.ownerId(), reply.text()));
+      boolean pendingReview = reply.proposedNextState().evidence().stream()
+          .anyMatch(evidence -> evidence.provenance().equals("pending-interaction"));
+      String text = pendingReview
+          ? reply.text() + " The court side and other proposed terms remain as shown in the"
+              + " pending offer; nothing has been approved or changed."
+          : reply.text();
+      return new OwnerChatPath.Reply(new OwnerReply(reply.messageId(), scope.ownerId(), text));
     }
     ChatHandoff handoff = result.handoff().orElseThrow();
     ChatState state = handoff.state();
