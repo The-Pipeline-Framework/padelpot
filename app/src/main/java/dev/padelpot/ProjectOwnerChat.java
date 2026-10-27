@@ -3,7 +3,6 @@ package dev.padelpot;
 import dev.padelpot.domain.OwnerAction;
 import dev.padelpot.domain.OwnerChatPath;
 import dev.padelpot.domain.OwnerReply;
-import dev.padelpot.domain.PendingCounter;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.nio.charset.StandardCharsets;
@@ -50,35 +49,12 @@ public class ProjectOwnerChat implements ReactiveService<ChatResult, OwnerChatPa
         || proposal.argumentsJson().getBytes(StandardCharsets.UTF_8).length > 4096) {
       throw new IllegalArgumentException("Chat handoff is outside the authorized owner action contract");
     }
-    if ("review.counter.submit".equals(proposal.operation())) {
-      PendingCounter counter;
-      try {
-        counter = PipelineJson.mapper().readValue(proposal.argumentsJson(), PendingCounter.class);
-      } catch (Exception failure) {
-        throw new IllegalArgumentException("Chat handoff has invalid typed counter arguments", failure);
-      }
-      if (counter.requestId() == null || counter.ownerId() == null
-          || counter.ownerText() == null || counter.interactionId() == null
-          || counter.counterText() == null
-          || !state.messageId().equals(counter.requestId())
-          || !state.scope().ownerId().equals(counter.ownerId())
-          || !state.message().equals(counter.ownerText())
-          || counter.counterText().isBlank() || counter.counterText().length() > 1200
-          || !state.message().toLowerCase(java.util.Locale.ROOT).contains(
-              counter.counterText().trim().toLowerCase(java.util.Locale.ROOT))
-          || state.evidence().stream().noneMatch(evidence ->
-              evidence.provenance().equals("pending-interaction")
-                  && evidence.entryId().equals("pending-review:" + counter.interactionId()))) {
-        throw new IllegalArgumentException("Chat handoff violates pending counter rules");
-      }
-      return new OwnerChatPath.Counter(counter);
-    }
     if (!"owner.action.apply".equals(proposal.operation()))
       throw new IllegalArgumentException("Chat handoff uses an unknown application operation");
     if (state.evidence().stream().anyMatch(evidence ->
         evidence.provenance().equals("pending-interaction")))
       return new OwnerChatPath.Reply(new OwnerReply(state.messageId(), state.scope().ownerId(),
-          "You have a pending decision. Please finish or decline it before starting another"
+          "You have a pending decision. Please approve, counter or decline it before starting another"
               + " match request; I can answer questions without changing that decision."));
     OwnerAction action;
     try {

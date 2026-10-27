@@ -9,12 +9,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.time.*;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
 import org.pipelineframework.blocks.chat.ChatEvidence;
 import org.pipelineframework.blocks.chat.ChatState;
 import org.pipelineframework.PipelineExecutionService;
-import org.pipelineframework.awaitable.AwaitCompletionCommand;
 import org.pipelineframework.connector.conversation.ConversationScope;
 
 @ApplicationScoped
@@ -111,11 +108,9 @@ public class PadelApplication implements PadelOperations {
             "Current live review for this owner: interactionId="
                 + ingress.pendingInteractionId() + "; kind=" + review.kind() + "; question="
                 + review.prompt() + "; field=" + review.field() + "; value=" + review.value()
-                + ". This review is still waiting. A natural reply leaves it open. Approve and"
-                + " Decline require explicit controls. Use pending_counter only for one clear"
-                + " match-terms counterproposal, copying the exact counter words from the owner."
-                + " If the message also asks a separate question, reply to both parts and leave"
-                + " the review open; ask for a separate counter if needed. When the owner agrees"
+                + ". This review is still waiting. A natural reply leaves it open. Approve,"
+                + " Decline and Counter require explicit controls. If the message asks a separate"
+                + " question, answer it and leave the review open. When the owner agrees"
                 + " to one offered term while asking something else, acknowledge that term and"
                 + " answer the other request. The review still needs explicit approval. Never"
                 + " treat agreement on a court side as participation approval.", Optional.empty()));
@@ -158,53 +153,6 @@ public class PadelApplication implements PadelOperations {
       }
     }
     return new Result(reply.messageId(), reply.ownerId(), "CHAT_REPLIED", reply.text(), "");
-  }
-
-  /** A typed ChatAgent proposal resumes only the named, still-pending owner review. */
-  public CompletionStage<Result> submitPendingCounter(PendingCounter counter) {
-    if (counter == null || counter.requestId() == null || counter.ownerId() == null
-        || counter.ownerText() == null || counter.interactionId() == null
-        || counter.counterText() == null || counter.interactionId().isBlank()
-        || counter.counterText().isBlank() || counter.counterText().length() > 1200
-        || !counter.requestId().startsWith(counter.ownerId() + ":")
-        || !counter.ownerText().toLowerCase(Locale.ROOT).contains(
-            counter.counterText().trim().toLowerCase(Locale.ROOT)))
-      return CompletableFuture.failedStage(
-          new IllegalArgumentException("Pending counter is outside the owner request"));
-    return pipeline.queryPendingAwaitInteractions("padelpot-demo", "", "", "", 100)
-        .subscribeAsCompletionStage().thenCompose(interactions -> {
-          var pending = interactions.stream()
-              .filter(interaction -> counter.interactionId().equals(interaction.interactionId()))
-              .findFirst();
-          if (pending.isEmpty())
-            return CompletableFuture.completedStage(new Result(
-                counter.requestId(), counter.ownerId(), "INTERACTION_EXPIRED",
-                "That review is no longer pending. Please start a fresh request.", ""));
-          Review review = Review.class.cast(pending.orElseThrow().requestPayload());
-          if (!counter.ownerId().equals(review.state().ownerId()))
-            return CompletableFuture.failedStage(
-                new IllegalArgumentException("Pending review belongs to another owner"));
-          if (!Set.of("participation", "clarify").contains(review.kind()))
-            return CompletableFuture.completedStage(new Result(
-                counter.requestId(), counter.ownerId(), "COUNTER_UNAVAILABLE",
-                "This review cannot take a match counterproposal. Use its explicit controls.", ""));
-          AnsweredReview answer = new OwnerProjector().project(
-              review, new HumanAnswer("counter", counter.counterText().trim()), counter.ownerId());
-          return pipeline.completeAwaitInteraction(new AwaitCompletionCommand(
-                  "padelpot-demo", counter.interactionId(), "", "",
-                  counter.requestId(), answer, counter.ownerId(), System.currentTimeMillis()))
-              .subscribeAsCompletionStage().thenApply(accepted -> {
-                String message = "I sent your counterproposal for the pending review. This does"
-                    + " not approve participation; wait for the updated offer or a fresh-request"
-                    + " instruction.";
-                synchronized (store) {
-                  if (store.snapshot().applied.add("counter-ack:" + counter.requestId()))
-                    store.message(counter.ownerId(), "agent", message);
-                }
-                return new Result(counter.requestId(), counter.ownerId(),
-                    "COUNTER_SUBMITTED", message, review.state().matchId());
-              });
-        });
   }
 
   public TurnOutcome applyOwnerAction(OwnerAction action) {

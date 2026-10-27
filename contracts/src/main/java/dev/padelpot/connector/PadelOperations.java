@@ -16,8 +16,6 @@ public interface PadelOperations {
 
   TurnOutcome applyOwnerAction(OwnerAction action);
 
-  CompletionStage<Result> submitPendingCounter(PendingCounter counter);
-
   TurnOutcome apply(ValidatedModelTurn turn);
 
   OwnerInteraction answer(AnsweredReview answer);

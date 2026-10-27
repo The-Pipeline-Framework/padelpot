@@ -75,7 +75,7 @@ class ChatAgentConsumptionTest {
   }
 
   @Test
-  void pendingApprovalQuestionsUseChatAgentAndTypedCountersResumeAwait() throws Exception {
+  void pendingApprovalQuestionsUseChatAgentAndExplicitCountersResumeAwait() throws Exception {
     session.reset(false);
     var match = new DemoSession.Match();
     match.id = "pending-chat-match";
@@ -102,12 +102,18 @@ class ChatAgentConsumptionTest {
         turn.role().equals("agent") && turn.text().contains("cannot arrange a lift")
             && turn.text().contains("nothing has been approved or changed")));
 
-    String counter = sendWithReview("luz", interactionId,
-        "Could we switch to the right instead?");
-    TopologyTest.awaitStatus(counter, "SUCCEEDED");
+    String negated = sendWithReview("luz", interactionId,
+        "Please don't switch to the right instead?");
+    TopologyTest.awaitStatus(negated, "SUCCEEDED");
+    assertEquals(interactionId, TopologyTest.awaitPending("luz").get("id"));
+    assertFalse(match.players.containsKey("luz"));
+
+    given().contentType("application/json")
+        .body(Map.of("ownerId", "luz", "messageId", UUID.randomUUID().toString(),
+            "text", "Could we switch to the right instead?", "interactionId", interactionId,
+            "choice", "counter"))
+        .post("/api/messages").then().statusCode(200);
     assertFalse(match.players.containsKey("luz"), "A counter must not approve participation");
-    assertTrue(session.player("luz").chat.stream().anyMatch(turn ->
-        turn.role().equals("agent") && turn.text().contains("sent your counterproposal")));
     for (int attempt = 0; attempt < 100; attempt++) {
       var current = given().get("/api/owners/luz").then().statusCode(200)
           .extract().<List<Map<String, Object>>>path("pending");
@@ -122,7 +128,7 @@ class ChatAgentConsumptionTest {
       }
       Thread.sleep(100);
     }
-    throw new AssertionError("The typed counter did not resume native negotiation");
+    throw new AssertionError("The explicit counter did not resume native negotiation");
   }
 
   private static String sendWithReview(String owner, String interactionId, String text) {

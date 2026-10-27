@@ -61,6 +61,7 @@ public class ChannelAdapter {
           try {
             reply =
                 msg.choice() == null
+                    || ("clarify".equals(msg.choice()) && review.kind().equals("clarify"))
                     ? new OwnerProjector().fromText(review, msg.text(), msg.ownerId())
                     : new OwnerProjector()
                         .project(review, new HumanAnswer(msg.choice(), msg.text()), msg.ownerId());

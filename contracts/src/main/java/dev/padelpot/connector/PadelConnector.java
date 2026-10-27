@@ -32,7 +32,6 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
   public Collection<? extends ConnectorOperation> operations() {
     return List.of(new Load(this), new ChatContext(this),
         new CourtGuideLookup(this), new PublishChatReply(this), new ApplyOwnerAction(this),
-        new SubmitPendingCounter(this),
         new Apply(this), new Answer(this), new FinalAnswer(this), new EraseHistory(this));
   }
 
@@ -92,26 +91,6 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
         CommandInvocation<OwnerAction, OperationConfig> invocation) {
       return CompletableFuture.completedFuture(new CommandOutcome.Succeeded<>(
           p.application.get().applyOwnerAction(invocation.input()), CommandConfirmation.none(), List.of()));
-    }
-  }
-
-  private static final class SubmitPendingCounter
-      implements CommandOperation<PendingCounter, OperationConfig, Result> {
-    private final PadelConnector p;
-
-    SubmitPendingCounter(PadelConnector p) { this.p = p; }
-
-    public String id() { return "review.counter.submit"; }
-
-    public Optional<ConnectorConfigSchema<OperationConfig>> configurationSchema() {
-      return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.review.counter", 1));
-    }
-
-    public CompletionStage<CommandOutcome<Result>> dispatch(
-        CommandInvocation<PendingCounter, OperationConfig> invocation) {
-      return p.application.get().submitPendingCounter(invocation.input())
-          .thenApply(result -> new CommandOutcome.Succeeded<>(
-              result, CommandConfirmation.none(), List.of()));
     }
   }
 

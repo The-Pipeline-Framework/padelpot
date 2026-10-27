@@ -162,7 +162,7 @@ function renderWorking() {
       );
       failure.id = "request-failure";
       failure.setAttribute("role", "status");
-      if (selected !== "alba")
+      if (selected !== "alba" && !detail.pending.length)
         failure.append(button("Start a new match search", () => send(freshFindRequest)));
       $("messages").append(failure);
     }
@@ -211,11 +211,14 @@ function renderDecision() {
     ),
     node("p", p.prompt),
   );
+  const counterOrClarification = p.kind === "clarify" || p.kind === "participation";
   const input = node("input");
-  if (p.kind === "clarify") {
-    input.placeholder = "Answer this permission question";
+  if (counterOrClarification) {
+    input.placeholder = p.kind === "clarify"
+      ? "Answer this permission question or propose a counter"
+      : "Propose different match terms";
     input.maxLength = 1200;
-    input.setAttribute("aria-label", "Answer this permission question");
+    input.setAttribute("aria-label", input.placeholder);
     const draftKey = selected + ":" + p.id;
     input.value = decisionDrafts.get(draftKey) || "";
     input.addEventListener("input", () =>
@@ -224,7 +227,7 @@ function renderDecision() {
     container.append(input);
   } else {
     container.append(node("p",
-      "Questions and proposed changes go in the chat below. They leave this approval open."));
+      "Questions go in the chat below. They leave this approval open."));
   }
   const actions = node("div", undefined, "actions");
   actions.append(
@@ -247,6 +250,11 @@ function renderDecision() {
         reply(p, "clarify", input.value.trim()),
       ),
     );
+  if (counterOrClarification)
+    actions.append(button("Counter", () => {
+      if (!input.value.trim()) return error(Error("Write your counterproposal above."));
+      reply(p, "counter", input.value.trim());
+    }));
   container.append(actions);
   for (const b of actions.children) b.disabled = busy;
 }
