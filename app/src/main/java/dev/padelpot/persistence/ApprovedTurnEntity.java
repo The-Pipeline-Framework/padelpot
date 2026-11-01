@@ -23,7 +23,7 @@ public class ApprovedTurnEntity {
   public String actorId, rootOwnerId, mode, matchId, style, side, lastAction, team, status;
   public String reviewKind, reviewField, reviewValue;
   @Column(name = "turn_number") public int turn;
-  public int reviewRound;
+  @org.hibernate.annotations.ColumnDefault("0") public int reviewRound;
   @Column(name = "requested_hour") public int hour;
   public long deadline, ownerVersion, organizerVersion;
   @ElementCollection(fetch = FetchType.EAGER) public List<String> transcript = new ArrayList<>();
