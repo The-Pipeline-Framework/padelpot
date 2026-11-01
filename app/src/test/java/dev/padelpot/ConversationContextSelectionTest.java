@@ -75,9 +75,7 @@ class ConversationContextSelectionTest {
     for (String file : List.of("pipeline.yaml", "pipeline.ollama.yaml", "pipeline.fixture.yaml")) {
       Map<?, ?> document = new Yaml().load(
           Files.readString(Path.of("src/main/resources", file)));
-      Map<?, ?> definitions = (Map<?, ?>) document.get("pipelines");
-      Map<?, ?> agent = (Map<?, ?>) definitions.get("personal-agent");
-      List<?> steps = (List<?>) agent.get("steps");
+      List<?> steps = (List<?>) document.get("steps");
       Map<?, ?> model = steps.stream().map(step -> (Map<?, ?>) step)
           .filter(step -> "Gemma proposes one action".equals(step.get("name")))
           .findFirst().orElseThrow();
@@ -89,7 +87,7 @@ class ConversationContextSelectionTest {
 
   private static TurnState state(String message) {
     return new TurnState("alba:request", "alba", "alba", "chat", "", 0,
-        1_800_000L, 1L, 0L, 19, "competitive", "left", "", List.of(), message, "");
+        1_800_000L, 1L, 0L, 19, "competitive", "left", "", List.of(), message, "", 0);
   }
 
   private static ModelInput base(TurnState state) {

@@ -32,7 +32,7 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
   public Collection<? extends ConnectorOperation> operations() {
     return List.of(new Load(this), new ChatContext(this),
         new CourtGuideLookup(this), new PublishChatReply(this), new ApplyOwnerAction(this),
-        new Apply(this), new Answer(this), new FinalAnswer(this), new EraseHistory(this));
+        new Apply(this), new Answer(this), new PublishReview(this), new PublishResult(this), new EraseHistory(this));
   }
 
   private static final class CourtGuideLookup
@@ -189,27 +189,31 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
     }
   }
 
-  private static final class FinalAnswer
-      implements CommandOperation<AnsweredReview, OperationConfig, OwnerInteraction> {
-    private final PadelConnector p;
-
-    FinalAnswer(PadelConnector p) {
-      this.p = p;
-    }
-
-    public String id() {
-      return "human.final";
-    }
-
+  private static final class PublishReview
+      implements CommandOperation<Review, OperationConfig, Review> {
+    private final PadelConnector provider;
+    PublishReview(PadelConnector provider) { this.provider = provider; }
+    public String id() { return "conversation.review.publish"; }
     public Optional<ConnectorConfigSchema<OperationConfig>> configurationSchema() {
-      return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.final", 1));
+      return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.publish.review", 1));
     }
+    public CompletionStage<CommandOutcome<Review>> dispatch(CommandInvocation<Review, OperationConfig> invocation) {
+      return provider.application.get().publishReview(invocation.input())
+          .thenApply(value -> new CommandOutcome.Succeeded<>(value, CommandConfirmation.none(), List.of()));
+    }
+  }
 
-    public CompletionStage<CommandOutcome<OwnerInteraction>> dispatch(
-        CommandInvocation<AnsweredReview, OperationConfig> i) {
-      OwnerInteraction r = p.application.get().answerFinal(i.input());
-      return CompletableFuture.completedFuture(
-          new CommandOutcome.Succeeded<>(r, CommandConfirmation.none(), List.of()));
+  private static final class PublishResult
+      implements CommandOperation<Result, OperationConfig, Result> {
+    private final PadelConnector provider;
+    PublishResult(PadelConnector provider) { this.provider = provider; }
+    public String id() { return "conversation.result.publish"; }
+    public Optional<ConnectorConfigSchema<OperationConfig>> configurationSchema() {
+      return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.publish.result", 1));
+    }
+    public CompletionStage<CommandOutcome<Result>> dispatch(CommandInvocation<Result, OperationConfig> invocation) {
+      return provider.application.get().publishResult(invocation.input())
+          .thenApply(value -> new CommandOutcome.Succeeded<>(value, CommandConfirmation.none(), List.of()));
     }
   }
 

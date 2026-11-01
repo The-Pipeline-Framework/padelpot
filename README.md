@@ -8,7 +8,7 @@ A local, open-source padel coordination experiment for Hacktoberfest 2026 — To
 
 ## Run
 
-Requires Java 21 and Python 3 for the optional evidence runner. The included Maven wrapper downloads dependencies. TPF **26.10.1-SNAPSHOT**, Quarkus **3.39.2**. The snapshot includes the [recursive parent-context fix](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/44) needed by this demo; see the [live verification](docs/live-verification.md) for the exact tested runtime build.
+Requires Java 21 and Python 3 for the optional evidence runner. The included Maven wrapper downloads dependencies. TPF **26.11.1-SNAPSHOT**, Quarkus **3.39.2**. The snapshot includes the [recursive parent-context fix](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/44) needed by this demo; see the [live verification](docs/live-verification.md) for the exact tested runtime build.
 
 Default Gemma 4 (`google/gemma-4-26b-a4b-it`) through OpenRouter:
 
@@ -87,8 +87,22 @@ To exercise history across a real process boundary with an isolated fixture data
 
 For a real-model context check, start a fresh disposable PadelPot server using OpenRouter or Ollama, then run `python3 scripts/context-real-smoke.py --base http://127.0.0.1:8080`. The script sends an initial time, an explicit correction with a reason, and a later recall question in separate roots. It requires natural replies and the final answer to use the correction and reason. The fixture model does not satisfy this check; a model that proposes an action or an Await review for these statements fails the smoke check.
 
-Persistence failures fail the root; in-memory working changes are not automatically rolled back. This is a single-process capacity authority, with no cross-process transaction guarantee. Live testing reproduced the recursive execution failure on TPF 26.9.4; sequential processing did not resolve it. The app now uses the published runtime fix in 26.10.1-SNAPSHOT, verified with real Gemma and the regression suite. Snapshots can change, and successful recordings do not guarantee every future model outcome. Failed recordings remain failures, with no silent model fallback. See [live verification](docs/live-verification.md) and [production follow-up](docs/productionization.md).
+Persistence failures fail the root; in-memory working changes are not automatically rolled back. This is a single-process capacity authority, with no cross-process transaction guarantee. Live testing reproduced the recursive execution failure on TPF 26.9.4; sequential processing did not resolve it. The earlier 26.10.1-SNAPSHOT runtime fix was verified with real Gemma and the regression suite; this migration targets the coordinated 26.11.1-SNAPSHOT compiler/runtime changes. Snapshots can change, and successful recordings do not guarantee every future model outcome. Failed recordings remain failures, with no silent model fallback. See [live verification](docs/live-verification.md) and [production follow-up](docs/productionization.md).
 
 Use only fictional data. The current request, selected earlier turns, pending conversational question, correlated answer and minimal preferences reach the configured inference provider; remote inference is not fully private. Deleting a current persona field does not erase historical chat or exported evidence. Erasing saved conversation history does not remove exported replay files or provider-side data.
 
 Apache-2.0. New application work; TPF and its released connectors are dependencies. See [contributing](CONTRIBUTING.md) for scoped Hacktoberfest work.
+
+## Typed recurrence and approval boundaries
+
+The root declares `recur: [TurnState]`. One authored step consumes each concrete
+input type per pipeline definition; generated continuations route a new turn back
+to its existing consumer. The reusable ChatAgent invocation remains part of the
+owner conversation path.
+
+Review and final-result publication are real Commands backed by the framework
+persistence shell. Review publication carries ordinary transport `await:`; its
+completion is consumed by one human-decision operation. `reviewRound` records the
+trusted approval phase and keeps command identities distinct across the first and
+final review. The flow uses no identity services or nominal type wrappers to carry
+Await or select a second consumer.

@@ -8,9 +8,10 @@ import org.pipelineframework.mapper.Mapper;
 /** The terminal policy result is an approved agent utterance; a model proposal is not. */
 @ApplicationScoped
 public class AgentTurnMapper implements Mapper<Result, ApprovedTurnEntity> {
+  @jakarta.inject.Inject dev.padelpot.ResultPublicationCommandId identity;
   public ApprovedTurnEntity toExternal(Result result) {
     var entity = new ApprovedTurnEntity();
-    entity.eventId = "padelpot-demo:" + result.requestId() + ":agent";
+    entity.eventId = identity.eventId(result);
     entity.tenantId = "padelpot-demo";
     entity.ownerId = result.ownerId();
     entity.conversationId = result.ownerId();

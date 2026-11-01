@@ -16,6 +16,15 @@ import org.pipelineframework.connector.conversation.ConversationScope;
 @ApplicationScoped
 public class PadelApplication implements PadelOperations {
   @Inject DemoSession store;
+  @Inject dev.padelpot.persistence.ApprovedConversationPublisher publication;
+
+  public java.util.concurrent.CompletionStage<Review> publishReview(Review review) {
+    return publication.publishReview(review);
+  }
+
+  public java.util.concurrent.CompletionStage<Result> publishResult(Result result) {
+    return publication.publishResult(result);
+  }
 
   @Inject dev.padelpot.persistence.AggregateQueries aggregates;
 
@@ -29,7 +38,7 @@ public class PadelApplication implements PadelOperations {
       var state = new TurnState(
           ingress.requestId(), owner.id, owner.id, "chat", "", 0,
           System.currentTimeMillis() + 900_000, owner.version, 0L, 19,
-          "competitive", Doubles.preferredSide(owner), "", List.of(), ingress.text(), "");
+          "competitive", Doubles.preferredSide(owner), "", List.of(), ingress.text(), "", 0);
       playerBrief = context(state).playerBrief();
     }
     var scope = new ConversationScope("padelpot-demo", ingress.ownerId(), ingress.ownerId());
@@ -96,7 +105,7 @@ public class PadelApplication implements PadelOperations {
       var state = new TurnState(
           action.requestId(), owner.id, owner.id, "chat", "", 0,
           System.currentTimeMillis() + 900_000, owner.version, 0L, 19,
-          "competitive", Doubles.preferredSide(owner), "", List.of(), action.ownerText(), "");
+          "competitive", Doubles.preferredSide(owner), "", List.of(), action.ownerText(), "", 0);
       String decision = switch (action.kind()) {
         case "open" -> "open";
         case "find" -> "find";
@@ -705,6 +714,22 @@ public class PadelApplication implements PadelOperations {
   }
 
   public OwnerInteraction answer(AnsweredReview a) {
+    OwnerInteraction outcome = a.review().state().reviewRound() == 0 ? answerOnce(a) : answerFinal(a);
+    if (outcome instanceof OwnerInteraction.Again again) {
+      TurnState state = again.value();
+      if (a.review().state().reviewRound() > 0) {
+        return new OwnerInteraction.Finished(new Result(state.requestId(), state.ownerId(), "NEEDS_FRESH_REQUEST",
+            "This request reached its final review. Send a fresh request to negotiate new boundaries.", state.matchId()));
+      }
+      return new OwnerInteraction.Again(new TurnState(state.requestId(), state.ownerId(), state.actorId(), state.mode(),
+          state.matchId(), state.turn(), state.deadline(), state.ownerVersion(), state.organizerVersion(), state.hour(),
+          state.style(), state.side(), state.lastAction(), state.transcript(), state.ownerText(), state.team(),
+          a.review().state().reviewRound() + 1));
+    }
+    return outcome;
+  }
+
+  private OwnerInteraction answerOnce(AnsweredReview a) {
     synchronized (store) {
       Review r = a.review();
       TurnState s = r.state();
@@ -988,7 +1013,7 @@ public class PadelApplication implements PadelOperations {
           a.review().state(),
           "NEEDS_FRESH_REQUEST",
           "Send a fresh request to negotiate these new boundaries.");
-    return answer(a);
+    return answerOnce(a);
   }
 
   TurnOutcome.Finished commit(TurnState s, HumanAnswer answer) {
@@ -1211,7 +1236,7 @@ public class PadelApplication implements PadelOperations {
         action,
         List.copyOf(transcript),
         text,
-        s.team());
+        s.team(), s.reviewRound());
   }
 
   static TurnState slotState(TurnState s, Doubles.Slot slot) {
@@ -1231,6 +1256,6 @@ public class PadelApplication implements PadelOperations {
         s.lastAction(),
         s.transcript(),
         s.ownerText(),
-        slot.team());
+        slot.team(), s.reviewRound());
   }
 }
