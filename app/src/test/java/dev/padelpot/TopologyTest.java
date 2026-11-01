@@ -22,6 +22,7 @@ public class TopologyTest {
   }
 
   @Inject DemoSession store;
+  @Inject dev.padelpot.persistence.AggregateQueries history;
 
   @Test
   void oneRequestOneRootAndCorrelatedHumanResume() throws Exception {
@@ -58,6 +59,9 @@ public class TopologyTest {
             .path("executionId");
     Map<String, Object> interaction = awaitPending("alba");
     assertEquals("open", interaction.get("kind"));
+    var persistedReview = history.allHistory("padelpot-demo", "alba").stream()
+        .filter(turn -> turn.speaker().equals("agent") && turn.text().equals(interaction.get("prompt")))
+        .findFirst().orElseThrow(() -> new AssertionError("The persistence aspect must store Review before Await"));
     assertEquals(
         1, store.snapshot().events.stream().filter(e -> e.type().equals("ROOT_STARTED")).count());
     assertTrue(store.snapshot().matches.isEmpty(), "No participation without approval");
@@ -112,6 +116,9 @@ public class TopologyTest {
         .then()
         .statusCode(200);
     awaitStatus(execution, "SUCCEEDED");
+    assertTrue(history.allHistory("padelpot-demo", "alba").stream()
+        .anyMatch(turn -> persistedReview.eventId().startsWith(turn.eventId() + ":review:")),
+        "Expected terminal Result related to " + persistedReview + "; stored: " + history.allHistory("padelpot-demo", "alba"));
     given()
         .contentType("application/json")
         .body(

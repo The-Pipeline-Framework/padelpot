@@ -16,16 +16,6 @@ import org.pipelineframework.connector.conversation.ConversationScope;
 @ApplicationScoped
 public class PadelApplication implements PadelOperations {
   @Inject DemoSession store;
-  @Inject dev.padelpot.persistence.ApprovedConversationPublisher publication;
-
-  public java.util.concurrent.CompletionStage<Review> publishReview(Review review) {
-    return publication.publishReview(review);
-  }
-
-  public java.util.concurrent.CompletionStage<Result> publishResult(Result result) {
-    return publication.publishResult(result);
-  }
-
   @Inject dev.padelpot.persistence.AggregateQueries aggregates;
 
   /** One authorized hydration supplies history and permitted player facts before the Block decides. */

@@ -2,8 +2,6 @@ package dev.padelpot;
 
 import dev.padelpot.domain.Review;
 import dev.padelpot.domain.TurnState;
-import dev.padelpot.persistence.AggregateQueries;
-import dev.padelpot.persistence.ApprovedConversationPublisher;
 import dev.padelpot.persistence.ReviewTurnMapper;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -15,25 +13,16 @@ import static org.junit.jupiter.api.Assertions.*;
 class ApprovedConversationPublicationTest {
   private final long deadline = System.currentTimeMillis() + 900_000;
   @Inject DemoSession session;
-  @Inject ApprovedConversationPublisher publisher;
-  @Inject AggregateQueries history;
   @Inject ReviewTurnMapper mapping;
-  @Inject ReviewPublicationCommandId identity;
 
   @Test
-  void publicationPersistsTheApprovedPromptAndPreservesFinalReviewAuthority() {
+  void mappingPreservesFinalReviewAuthorityAndDistinctEventIdentities() {
     session.reset(false);
     var state = state(1);
     var review = new Review(state, "conversation", "May I publish these terms?", "", "");
-    assertSame(review, publisher.publishReview(review).toCompletableFuture().join());
-    var saved = history.allHistory("padelpot-demo", "alba").stream()
-        .filter(turn -> turn.eventId().equals(identity.eventId(review))).toList();
-    assertEquals(1, saved.size());
-    assertEquals(review.prompt(), saved.getFirst().text());
-    assertEquals("agent", saved.getFirst().speaker());
     assertEquals(review, mapping.fromExternal(mapping.toExternal(review)));
-    assertNotEquals(identity.eventId(new Review(state(0), review.kind(), review.prompt(), "", "")),
-        identity.eventId(review), "A final review is a separate publication even when its prompt repeats");
+    assertNotEquals(mapping.toExternal(new Review(state(0), review.kind(), review.prompt(), "", "")).eventId,
+        mapping.toExternal(review).eventId, "A final review is a separate publication even when its prompt repeats");
     var descriptor = org.mockito.Mockito.mock(org.pipelineframework.command.CommandDescriptor.class);
     var answers = new AnswerCommandId();
     var answer = new dev.padelpot.domain.HumanAnswer("approve", "");

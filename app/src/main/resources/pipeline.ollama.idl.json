@@ -1824,6 +1824,42 @@
       },
       "contributedIdentity" : null
     },
+    "TurnCompletion" : {
+      "name" : "TurnCompletion",
+      "kind" : "union",
+      "fields" : [ ],
+      "target" : null,
+      "variants" : [ {
+        "discriminator" : "again",
+        "payload" : "TurnState",
+        "protoName" : "again",
+        "number" : 1
+      }, {
+        "discriminator" : "answered",
+        "payload" : "AnsweredReview",
+        "protoName" : "answered",
+        "number" : 2
+      }, {
+        "discriminator" : "finished",
+        "payload" : "Result",
+        "protoName" : "finished",
+        "number" : 3
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
+    },
     "PlayObservation" : {
       "name" : "PlayObservation",
       "kind" : "record",
@@ -3284,7 +3320,8 @@
   }, {
     "name" : "Apply validated owner action",
     "inputTypeName" : "OwnerChatPath",
-    "outputTypeName" : "TurnOutcome"
+    "outputTypeName" : "TurnCompletion",
+    "operationOutputTypeName" : "TurnOutcome"
   }, {
     "name" : "Load isolated player snapshot",
     "inputTypeName" : "OwnerInteraction",
@@ -3300,12 +3337,8 @@
   }, {
     "name" : "Apply policy and publish permitted terms",
     "inputTypeName" : "ValidatedModelTurn",
-    "outputTypeName" : "TurnOutcome"
-  }, {
-    "name" : "Publish approved owner review",
-    "inputTypeName" : "Review",
-    "outputTypeName" : "AnsweredReview",
-    "operationOutputTypeName" : "Review"
+    "outputTypeName" : "TurnCompletion",
+    "operationOutputTypeName" : "TurnOutcome"
   }, {
     "name" : "Apply owner decision",
     "inputTypeName" : "AnsweredReview",
@@ -3325,10 +3358,6 @@
   }, {
     "name" : "Erase approved conversation history",
     "inputTypeName" : "OwnerInteraction",
-    "outputTypeName" : "Result"
-  }, {
-    "name" : "Publish private owner result",
-    "inputTypeName" : "Result",
     "outputTypeName" : "Result"
   } ]
 }

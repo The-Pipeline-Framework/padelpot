@@ -181,6 +181,9 @@ types:
       again: TurnState
       reviewRequired: Review
       finished: Result
+  TurnCompletion:
+    java: dev.padelpot.domain.TurnCompletion
+    variants: { again: TurnState, answered: AnsweredReview, finished: Result }
   PlayObservation:
     fields: [{ name: owners, repeated: Owner }, [match, Match]]
     mappings:
@@ -256,7 +259,7 @@ steps:
     cardinality: ONE_TO_ONE
     input: OwnerChatPath
     accepts: [OwnerAction]
-    output: TurnOutcome
+    output: TurnCompletion
     using: application
     operation: owner.action.apply
     operationVersion: 1
@@ -265,7 +268,15 @@ steps:
     duplicatePolicy: RETURN_RECORDED
     java:
       input: dev.padelpot.domain.OwnerAction
-      output: dev.padelpot.domain.TurnOutcome
+      output: dev.padelpot.domain.TurnCompletion
+    await:
+      operationOutput: { type: TurnOutcome, java: dev.padelpot.domain.TurnOutcome }
+      accepts: [Review]
+      output: AnsweredReview
+      timeout: PT15M
+      correlation: { strategy: interactionId }
+      transport: { type: interaction-api }
+
   - name: Load isolated player snapshot
     kind: query
     cardinality: ONE_TO_ONE
@@ -362,35 +373,23 @@ steps:
     kind: command
     cardinality: ONE_TO_ONE
     input: ValidatedModelTurn
-    output: TurnOutcome
+    output: TurnCompletion
     using: application
     operation: turn.apply
     operationVersion: 1
     config: { label: authoritative-turn }
     commandIdGenerator: dev.padelpot.TurnCommandId
     duplicatePolicy: RETURN_RECORDED
-    java:
-      input: dev.padelpot.domain.ValidatedModelTurn
-      output: dev.padelpot.domain.TurnOutcome
-  - name: Publish approved owner review
-    kind: command
-    cardinality: ONE_TO_ONE
-    input: Review
-    output: AnsweredReview
-    using: application
-    operation: conversation.review.publish
-    operationVersion: 1
-    config: { label: approved-owner-review }
-    commandIdGenerator: dev.padelpot.ReviewPublicationCommandId
-    duplicatePolicy: RETURN_RECORDED
     await:
-      operationOutput: { type: Review, java: dev.padelpot.domain.Review }
+      operationOutput: { type: TurnOutcome, java: dev.padelpot.domain.TurnOutcome }
+      accepts: [Review]
+      output: AnsweredReview
       timeout: PT15M
       correlation: { strategy: interactionId }
       transport: { type: interaction-api }
     java:
-      input: dev.padelpot.domain.Review
-      output: dev.padelpot.domain.AnsweredReview
+      input: dev.padelpot.domain.ValidatedModelTurn
+      output: dev.padelpot.domain.TurnCompletion
   - name: Apply owner decision
     kind: command
     cardinality: ONE_TO_ONE
@@ -441,20 +440,6 @@ steps:
     java:
       input: dev.padelpot.domain.HistoryEraseRequest
       output: dev.padelpot.domain.Result
-  - name: Publish private owner result
-    kind: command
-    cardinality: ONE_TO_ONE
-    input: Result
-    output: Result
-    using: application
-    operation: conversation.result.publish
-    operationVersion: 1
-    config: { label: approved-owner-result }
-    commandIdGenerator: dev.padelpot.ResultPublicationCommandId
-    duplicatePolicy: RETURN_RECORDED
-    java:
-      input: dev.padelpot.domain.Result
-      output: dev.padelpot.domain.Result
 
 aspects:
   persistence:
@@ -463,4 +448,18 @@ aspects:
     position: BEFORE_STEP
     config:
       targetSteps: [Load isolated player snapshot, Hydrate conversational state, PublishOwnerResult, PublishMatchResult, ObservePlayedMatch]
+      pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
+  reviewPersistence:
+    enabled: true
+    scope: GLOBAL
+    position: AFTER_STEP
+    config:
+      targetTypes: [Review]
+      pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
+  resultPersistence:
+    enabled: true
+    scope: GLOBAL
+    position: AFTER_STEP
+    config:
+      targetTypes: [Result]
       pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService

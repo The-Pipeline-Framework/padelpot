@@ -77,11 +77,13 @@ sequenceDiagram
         TPF->>App: turn.apply Command
         App->>App: Check disclosure, side boundaries, vacancies, expiry and turn limit
         App-->>TPF: Again, Review or Result
-        Note over TPF,App: Again continues within the same root.<br/>Review returns to the root.
+        Note over TPF,App: Again follows bounded root recurrence.<br/>Review enters the operation's Await modifier.
     end
 
     opt Owner review required
-        TPF->>TPF: RequestReview operation with Await completion
+        TPF->>Persistence: Observe approved Review at its policy operation
+        Persistence->>DB: Persist mapped approved conversation turn
+        TPF->>TPF: Await selects Review; state and Result bypass the wait
         Owner->>Channel: Poll private conversation
         Channel->>TPF: Query pending interactions
         TPF-->>Channel: Review and interaction ID
@@ -92,7 +94,7 @@ sequenceDiagram
         TPF->>App: human.apply Command
         alt Clarification or counterproposal
             App-->>TPF: Again with the owner response
-            Note over TPF,Gemma: Repeat bounded nested negotiation.<br/>RequestFinalReview awaits the final owner choice.<br/>human.final rechecks authority and capacity in the same root.
+            Note over TPF,Gemma: Repeat bounded root negotiation.<br/>A later Review uses its trusted review round.<br/>human.apply rechecks authority and capacity.
         else Participation approval
             App->>App: Check owner, expiry, versions, blocks and exact team-side vacancy
             App->>Session: Apply valid participation to working copy
@@ -106,6 +108,12 @@ sequenceDiagram
         end
     end
 
+    opt Terminal Result produced
+        TPF->>Persistence: Observe approved Result at its producing operation
+        Persistence->>DB: Persist mapped approved conversation turn
+        TPF->>TPF: Complete the definition's Result contract
+    end
+
     Owner->>Channel: Poll private conversation and match
     Channel->>Session: Read owner messages and public match state
     Session-->>Channel: Current outcome
@@ -114,9 +122,9 @@ sequenceDiagram
 
 ## Application classes and state ownership
 
-The application owns persona meaning, disclosure policy, aggregate versions and commitment authority. TPF owns persistence execution. Approved persona changes emit a canonical `Owner` branch; approved participation emits `Match`. The YAML configures native persistence before the matching acknowledgement operations, using `mappings.persistence` to adapt canonical records to typed JPA representations. Generated persistence observers invoke TPF's released `PersistenceService` and `VThreadPersistenceProvider`. No business step calls a save method, and no application JSON writer or custom persistence provider remains.
+The application owns persona meaning, disclosure policy, aggregate versions and commitment authority. TPF owns persistence execution. Approved persona changes emit a canonical `Owner` branch; approved participation emits `Match`. The YAML configures persistence aspects before the matching acknowledgement operations, using `mappings.persistence` to adapt canonical records to typed JPA representations. Generated persistence observers invoke TPF's released `PersistenceService` and `VThreadPersistenceProvider`. No business step calls a save method, and no application JSON writer or custom persistence provider remains.
 
-`DemoSession` holds mutable working copies, a bounded chat view/event history and temporary intents in one process. The application owns `ApprovedTurnEntity` in H2. The declared persistence aspect observes accepted owner input before the first nested Query, the first policy-approved `Review` before Await, and a terminal `Result` before publication. It never stores an untrusted `AgentDecision` as an approved turn. Stable event IDs make repeated observation idempotent under the configured duplicate-key policy. The `persona.snapshot` Query reads the newest 100 tenant/owner-scoped earlier turns. `ConversationContextSelection` uses the portable `ContextAssembler` to prioritize recent entries, reserve room for the current owner message, omit oversized prior entries without owned references, and return selected history in chronological order. TPF captures the resulting `ModelInput` for Query replay. The assembler is pure; application storage, retention and disclosure remain PadelPot decisions. `history.erase` is a separate TPF Command with a stable command ID and an application-scoped erase operation. The fixture retains stored turns until erasure or reset. H2/JPA is blocking, so TPF offloads persistence to virtual threads; the history read and erase operations also use virtual threads. The Maven annotation processor receives the same `VThreadPersistenceProvider` class as the runtime setting, so the selected provider is checked during compilation. Short synchronized policy sections protect the organizer's capacity, uniqueness and version checks. Native admission, inference and Await completion run outside those locks. Await uses TPF's default execution-scoped identity. The removed `state.requestId` override was incorrect: 26.9.4 reads top-level field names and treated that dotted path as null, allowing reviews of the same kind to collide across roots. Concurrent requests are accepted; the provider's separate semaphore permits one model call at a time. `pipeline.parallelism=SEQUENTIAL` processes each root sequentially; independent roots still overlap. Every authored step is ONE_TO_ONE, so there is no item fan-out to parallelize. `pipeline.max-concurrency` controls item parallelism, not global root admission. `PadelOperations` is a typed application connector contract, rather than a generic port or repository.
+`DemoSession` holds mutable working copies, a bounded chat view/event history and temporary intents in one process. The application owns `ApprovedTurnEntity` in H2. The declared persistence aspect observes accepted owner input before the first nested Query, each policy-approved `Review` before Await, and terminal `Result` payloads at their producing operations. The Review and Result observers use AFTER_STEP with canonical targetTypes. The selected Await completes Review as AnsweredReview; the TurnCompletion union retains continuing state and terminal results. It never stores an untrusted `AgentDecision` as an approved turn. Stable event IDs make repeated observation idempotent under the configured duplicate-key policy. The `persona.snapshot` Query reads the newest 100 tenant/owner-scoped earlier turns. `ConversationContextSelection` uses the portable `ContextAssembler` to prioritize recent entries, reserve room for the current owner message, omit oversized prior entries without owned references, and return selected history in chronological order. TPF captures the resulting `ModelInput` for Query replay. The assembler is pure; application storage, retention and disclosure remain PadelPot decisions. `history.erase` is a separate TPF Command with a stable command ID and an application-scoped erase operation. The fixture retains stored turns until erasure or reset. H2/JPA is blocking, so TPF offloads persistence to virtual threads; the history read and erase operations also use virtual threads. The Maven annotation processor receives the same `VThreadPersistenceProvider` class as the runtime setting, so the selected provider is checked during compilation. Short synchronized policy sections protect the organizer's capacity, uniqueness and version checks. Native admission, inference and Await completion run outside those locks. Await uses TPF's default execution-scoped identity. The removed `state.requestId` override was incorrect: 26.9.4 reads top-level field names and treated that dotted path as null, allowing reviews of the same kind to collide across roots. Concurrent requests are accepted; the provider's separate semaphore permits one model call at a time. `pipeline.parallelism=SEQUENTIAL` processes each root sequentially; independent roots still overlap. Every authored step is ONE_TO_ONE, so there is no item fan-out to parallelize. `pipeline.max-concurrency` controls item parallelism, not global root admission. `PadelOperations` is a typed application connector contract, rather than a generic port or repository.
 
 Padel authority follows the [padel rules](padel-specs.md): four named places (A-left, A-right, B-left, B-right), and either, soft or strong court-side preferences. Trusted `TurnState` carries the concrete team and side into the approval. `Participation` preserves them in the approved match. Only candidate side preferences govern an offer, even when the organizer proposes it.
 

@@ -19,9 +19,5 @@ public interface PadelOperations {
 
   OwnerInteraction answer(AnsweredReview answer);
 
-  java.util.concurrent.CompletionStage<Review> publishReview(Review review);
-
-  java.util.concurrent.CompletionStage<Result> publishResult(Result result);
-
   Result eraseHistory(HistoryEraseRequest request);
 }

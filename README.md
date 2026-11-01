@@ -100,9 +100,9 @@ input type per pipeline definition; generated continuations route a new turn bac
 to its existing consumer. The reusable ChatAgent invocation remains part of the
 owner conversation path.
 
-Review and final-result publication are real Commands backed by the framework
-persistence shell. Review publication carries ordinary transport `await:`; its
-completion is consumed by one human-decision operation. `reviewRound` records the
-trusted approval phase and keeps command identities distinct across the first and
-final review. The flow uses no identity services or nominal type wrappers to carry
-Await or select a second consumer.
+Persistence aspects observe approved Review and Result payloads at their producing
+operations. The policy Commands select Review for `await:`; state and terminal
+outcomes continue immediately. One human-decision operation consumes AnsweredReview.
+`reviewRound` records the trusted approval phase and keeps command and review-event
+identities distinct across reviews. The completed output union describes the actual
+canonical outcomes. The flow adds no identity services or concrete phase wrappers.
