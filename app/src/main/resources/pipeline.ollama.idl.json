@@ -1964,6 +1964,83 @@
       },
       "contributedIdentity" : null
     },
+    "NegotiationInput" : {
+      "name" : "NegotiationInput",
+      "kind" : "union",
+      "fields" : [ ],
+      "target" : null,
+      "variants" : [ {
+        "discriminator" : "action",
+        "payload" : "OwnerAction",
+        "protoName" : "action",
+        "number" : 1
+      }, {
+        "discriminator" : "again",
+        "payload" : "TurnState",
+        "protoName" : "again",
+        "number" : 2
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
+    },
+    "NegotiationEnd" : {
+      "name" : "NegotiationEnd",
+      "kind" : "union",
+      "fields" : [ ],
+      "target" : null,
+      "variants" : [ {
+        "discriminator" : "eraseRequested",
+        "payload" : "HistoryEraseRequest",
+        "protoName" : "erase_requested",
+        "number" : 1
+      }, {
+        "discriminator" : "finished",
+        "payload" : "Result",
+        "protoName" : "finished",
+        "number" : 2
+      }, {
+        "discriminator" : "matchChanged",
+        "payload" : "Match",
+        "protoName" : "match_changed",
+        "number" : 3
+      }, {
+        "discriminator" : "observedPlay",
+        "payload" : "PlayObservation",
+        "protoName" : "observed_play",
+        "number" : 4
+      }, {
+        "discriminator" : "ownerChanged",
+        "payload" : "Owner",
+        "protoName" : "owner_changed",
+        "number" : 5
+      } ],
+      "reservedNumbers" : [ ],
+      "reservedNames" : [ ],
+      "constraints" : {
+        "minLength" : null,
+        "maxLength" : null,
+        "pattern" : null,
+        "format" : null,
+        "minimum" : null,
+        "minimumExclusive" : null,
+        "maximum" : null,
+        "maximumExclusive" : null,
+        "allowedValues" : [ ]
+      },
+      "contributedIdentity" : null
+    },
     "OwnerInteraction" : {
       "name" : "OwnerInteraction",
       "kind" : "union",
@@ -3318,31 +3395,9 @@
     "inputTypeName" : "OwnerChatPath",
     "outputTypeName" : "Result"
   }, {
-    "name" : "Apply validated owner action",
-    "inputTypeName" : "OwnerChatPath",
-    "outputTypeName" : "TurnCompletion",
-    "operationOutputTypeName" : "TurnOutcome"
-  }, {
-    "name" : "Load isolated player snapshot",
-    "inputTypeName" : "OwnerInteraction",
-    "outputTypeName" : "ModelInput"
-  }, {
-    "name" : "Gemma proposes one action",
-    "inputTypeName" : "ModelInput",
-    "outputTypeName" : "ModelTurn"
-  }, {
-    "name" : "Validate inert model proposal",
-    "inputTypeName" : "ModelTurn",
-    "outputTypeName" : "ValidatedModelTurn"
-  }, {
-    "name" : "Apply policy and publish permitted terms",
-    "inputTypeName" : "ValidatedModelTurn",
-    "outputTypeName" : "TurnCompletion",
-    "operationOutputTypeName" : "TurnOutcome"
-  }, {
-    "name" : "Apply owner decision",
-    "inputTypeName" : "AnsweredReview",
-    "outputTypeName" : "OwnerInteraction"
+    "name" : "Negotiate with personal agent",
+    "inputTypeName" : "NegotiationInput",
+    "outputTypeName" : "NegotiationEnd"
   }, {
     "name" : "ObservePlayedMatch",
     "inputTypeName" : "OwnerInteraction",

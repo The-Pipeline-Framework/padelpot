@@ -77,7 +77,7 @@ sequenceDiagram
         TPF->>App: turn.apply Command
         App->>App: Check disclosure, side boundaries, vacancies, expiry and turn limit
         App-->>TPF: Again, Review or Result
-        Note over TPF,App: Again follows bounded root recurrence.<br/>Review enters the operation's Await modifier.
+        Note over TPF,App: Again invokes the personal agent through its bounded self-call.<br/>Review enters the operation's Await modifier.
     end
 
     opt Owner review required

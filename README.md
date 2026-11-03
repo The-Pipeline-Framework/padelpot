@@ -95,10 +95,11 @@ Apache-2.0. New application work; TPF and its released connectors are dependenci
 
 ## Typed recurrence and approval boundaries
 
-The root declares `recur: [TurnState]`. One authored step consumes each concrete
-input type per pipeline definition; generated continuations route a new turn back
-to its existing consumer. The reusable ChatAgent invocation remains part of the
-owner conversation path.
+The root calls the named personal agent with an owner action or continuing turn state.
+Its policy Command produces Review when it needs the owner's decision. A correlated answer
+resumes the agent in the same execution. If the answer authorizes another negotiation turn,
+an explicit `pipeline: self` step takes the updated TurnState. A completed negotiation
+returns to the root, which finishes the applicable owner, match, or conversation result.
 
 Persistence aspects observe approved Review and Result payloads at their producing
 operations. The policy Commands select Review for `await:`; state and terminal
