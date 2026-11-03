@@ -13,8 +13,9 @@ public class ReviewTurnMapper implements Mapper<Review, ApprovedTurnEntity> {
 
   public ApprovedTurnEntity toExternal(Review review) {
     var entity = states.toExternal(review.state());
+    String reviewPhase = review.state().reviewRound() == 0 ? "" : review.state().reviewRound() + ":";
     String identity = review.state().requestId() + ":" + review.kind() + ":" + review.state().turn()
-        + ":" + review.state().actorId() + ":" + review.state().reviewRound() + ":" + review.prompt();
+        + ":" + review.state().actorId() + ":" + reviewPhase + review.prompt();
     entity.eventId = "padelpot-demo:" + review.state().requestId() + ":agent:review:"
         + java.util.UUID.nameUUIDFromBytes(identity.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     entity.speaker = "agent";

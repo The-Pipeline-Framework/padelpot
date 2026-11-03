@@ -32,6 +32,17 @@ class ApprovedConversationPublicationTest {
         "Applying the final answer has its own logical effect identity");
   }
 
+  @Test
+  void roundZeroKeepsTheLegacyReviewIdentity() {
+    session.reset(false);
+    var review = new Review(state(0), "conversation", "May I publish these terms?", "", "");
+    String legacy = review.state().requestId() + ":" + review.kind() + ":" + review.state().turn()
+        + ":" + review.state().actorId() + ":" + review.prompt();
+    String expected = "padelpot-demo:" + review.state().requestId() + ":agent:review:"
+        + java.util.UUID.nameUUIDFromBytes(legacy.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    assertEquals(expected, mapping.toExternal(review).eventId);
+  }
+
   private TurnState state(int round) {
     var player = session.player("alba");
     return new TurnState("publication-review", "alba", "alba", "chat", "", 1,
