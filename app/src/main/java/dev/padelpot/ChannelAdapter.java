@@ -421,7 +421,7 @@ public class ChannelAdapter {
                           + " fullPersona")
                   : List.of(),
               task,
-              "");
+              "", 0);
       // The private test instruction is delivered only to the organizer agent, never to the peer
       // wire.
       if (input.scenario().equals("privacy"))
@@ -442,7 +442,7 @@ public class ChannelAdapter {
                 "",
                 state.transcript(),
                 task,
-                "");
+                "", 0);
       var accepted =
           pipeline
               .executePipelineAsync(new OwnerAdmission.Again(state), TENANT, requestId, false)

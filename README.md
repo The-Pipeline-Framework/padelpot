@@ -8,7 +8,7 @@ A local, open-source padel coordination experiment for Hacktoberfest 2026 — To
 
 ## Run
 
-Requires Java 21 and Python 3 for the optional evidence runner. The included Maven wrapper downloads dependencies. TPF **26.10.1-SNAPSHOT**, Quarkus **3.39.2**. The snapshot includes the [recursive parent-context fix](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/44) needed by this demo; see the [live verification](docs/live-verification.md) for the exact tested runtime build.
+Requires Java 21 and Python 3 for the optional evidence runner. The included Maven wrapper downloads dependencies. TPF **26.11.1-SNAPSHOT**, Quarkus **3.39.2**. The snapshot includes the [recursive parent-context fix](https://github.com/The-Pipeline-Framework/pipelineframework-runtime/pull/44) needed by this demo; see the [live verification](docs/live-verification.md) for the exact tested runtime build.
 
 Default Gemma 4 (`google/gemma-4-26b-a4b-it`) through OpenRouter:
 
@@ -87,8 +87,23 @@ To exercise history across a real process boundary with an isolated fixture data
 
 For a real-model context check, start a fresh disposable PadelPot server using OpenRouter or Ollama, then run `python3 scripts/context-real-smoke.py --base http://127.0.0.1:8080`. The script sends an initial time, an explicit correction with a reason, and a later recall question in separate roots. It requires natural replies and the final answer to use the correction and reason. The fixture model does not satisfy this check; a model that proposes an action or an Await review for these statements fails the smoke check.
 
-Persistence failures fail the root; in-memory working changes are not automatically rolled back. This is a single-process capacity authority, with no cross-process transaction guarantee. Live testing reproduced the recursive execution failure on TPF 26.9.4; sequential processing did not resolve it. The app now uses the published runtime fix in 26.10.1-SNAPSHOT, verified with real Gemma and the regression suite. Snapshots can change, and successful recordings do not guarantee every future model outcome. Failed recordings remain failures, with no silent model fallback. See [live verification](docs/live-verification.md) and [production follow-up](docs/productionization.md).
+Persistence failures fail the root; in-memory working changes are not automatically rolled back. This is a single-process capacity authority, with no cross-process transaction guarantee. Live testing reproduced the recursive execution failure on TPF 26.9.4; sequential processing did not resolve it. The earlier 26.10.1-SNAPSHOT runtime fix was verified with real Gemma and the regression suite; this migration targets the coordinated 26.11.1-SNAPSHOT compiler/runtime changes. Snapshots can change, and successful recordings do not guarantee every future model outcome. Failed recordings remain failures, with no silent model fallback. See [live verification](docs/live-verification.md) and [production follow-up](docs/productionization.md).
 
 Use only fictional data. The current request, selected earlier turns, pending conversational question, correlated answer and minimal preferences reach the configured inference provider; remote inference is not fully private. Deleting a current persona field does not erase historical chat or exported evidence. Erasing saved conversation history does not remove exported replay files or provider-side data.
 
 Apache-2.0. New application work; TPF and its released connectors are dependencies. See [contributing](CONTRIBUTING.md) for scoped Hacktoberfest work.
+
+## Typed recurrence and approval boundaries
+
+The root calls the named personal agent with an owner action or continuing turn state.
+Its policy Command produces Review when it needs the owner's decision. A correlated answer
+resumes the agent in the same execution. If the answer authorizes another negotiation turn,
+an explicit `pipeline: self` step takes the updated TurnState. A completed negotiation
+returns to the root, which finishes the applicable owner, match, or conversation result.
+
+Persistence aspects observe approved Review and Result payloads at their producing
+operations. The policy Commands select Review for `await:`; state and terminal
+outcomes continue immediately. One human-decision operation consumes AnsweredReview.
+`reviewRound` records the trusted approval phase and keeps command and review-event
+identities distinct across reviews. The completed output union describes the actual
+canonical outcomes. The flow adds no identity services or concrete phase wrappers.

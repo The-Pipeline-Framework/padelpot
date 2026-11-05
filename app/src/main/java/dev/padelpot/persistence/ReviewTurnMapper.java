@@ -4,8 +4,6 @@ import dev.padelpot.domain.Review;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.time.Instant;
-import java.nio.charset.StandardCharsets;
-import java.util.UUID;
 import org.pipelineframework.mapper.Mapper;
 
 /** A policy-approved prompt appears in history before its correlated Await reply. */
@@ -15,12 +13,11 @@ public class ReviewTurnMapper implements Mapper<Review, ApprovedTurnEntity> {
 
   public ApprovedTurnEntity toExternal(Review review) {
     var entity = states.toExternal(review.state());
-    String identity =
-        review.state().requestId() + ":" + review.kind() + ":" + review.state().turn()
-            + ":" + review.state().actorId() + ":" + review.prompt();
-    entity.eventId =
-        "padelpot-demo:" + review.state().requestId() + ":agent:review:"
-            + UUID.nameUUIDFromBytes(identity.getBytes(StandardCharsets.UTF_8));
+    String reviewPhase = review.state().reviewRound() == 0 ? "" : review.state().reviewRound() + ":";
+    String identity = review.state().requestId() + ":" + review.kind() + ":" + review.state().turn()
+        + ":" + review.state().actorId() + ":" + reviewPhase + review.prompt();
+    entity.eventId = "padelpot-demo:" + review.state().requestId() + ":agent:review:"
+        + java.util.UUID.nameUUIDFromBytes(identity.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     entity.speaker = "agent";
     entity.occurredAt = Instant.now();
     entity.text = review.prompt();

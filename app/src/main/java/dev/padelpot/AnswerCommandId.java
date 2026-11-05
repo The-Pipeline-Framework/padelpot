@@ -12,6 +12,8 @@ public class AnswerCommandId implements CommandIdGenerator<AnsweredReview> {
         + ":"
         + t.review().state().turn()
         + ":"
-        + t.review().kind();
+        + t.review().kind()
+        + ":review-round:"
+        + t.review().state().reviewRound();
   }
 }

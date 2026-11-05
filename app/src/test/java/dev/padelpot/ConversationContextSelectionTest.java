@@ -89,7 +89,7 @@ class ConversationContextSelectionTest {
 
   private static TurnState state(String message) {
     return new TurnState("alba:request", "alba", "alba", "chat", "", 0,
-        1_800_000L, 1L, 0L, 19, "competitive", "left", "", List.of(), message, "");
+        1_800_000L, 1L, 0L, 19, "competitive", "left", "", List.of(), message, "", 0);
   }
 
   private static ModelInput base(TurnState state) {

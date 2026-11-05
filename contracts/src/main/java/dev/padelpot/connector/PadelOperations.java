@@ -19,7 +19,5 @@ public interface PadelOperations {
 
   OwnerInteraction answer(AnsweredReview answer);
 
-  OwnerInteraction answerFinal(AnsweredReview answer);
-
   Result eraseHistory(HistoryEraseRequest request);
 }

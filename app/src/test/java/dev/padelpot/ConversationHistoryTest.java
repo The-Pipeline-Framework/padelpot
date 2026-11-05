@@ -40,7 +40,7 @@ class ConversationHistoryTest {
         root.requestId(), root.ownerId(), "alba", "negotiate", root.matchId(), root.turn(),
         root.deadline(), root.ownerVersion(), root.organizerVersion(), root.hour(),
         root.style(), root.side(), root.lastAction(), root.transcript(),
-        "private organizer instruction", root.team());
+        "private organizer instruction", root.team(), 0);
 
     var saved = ownerTurns.toExternal(organizer);
     assertEquals("alba", saved.ownerId);
@@ -212,7 +212,7 @@ class ConversationHistoryTest {
         owner + ":follow-up", owner, owner, "chat", "", 0,
         System.currentTimeMillis() + 900_000, player.version, 0L, 19,
         "competitive", Doubles.preferredSide(player), "", List.of(),
-        "What did I say before?", "");
+        "What did I say before?", "", 0);
   }
 
 }

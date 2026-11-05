@@ -24,6 +24,7 @@ public class OwnerTurnMapper implements Mapper<TurnState, ApprovedTurnEntity> {
     entity.mode = turn.mode();
     entity.matchId = turn.matchId();
     entity.turn = turn.turn();
+    entity.reviewRound = turn.reviewRound();
     entity.deadline = turn.deadline();
     entity.ownerVersion = turn.ownerVersion();
     entity.organizerVersion = turn.organizerVersion();
@@ -42,6 +43,6 @@ public class OwnerTurnMapper implements Mapper<TurnState, ApprovedTurnEntity> {
         entity.actorId, entity.mode, entity.matchId,
         entity.turn, entity.deadline, entity.ownerVersion, entity.organizerVersion,
         entity.hour, entity.style, entity.side, entity.lastAction,
-        entity.transcript, entity.ownerText, entity.team);
+        entity.transcript, entity.ownerText, entity.team, entity.reviewRound);
   }
 }

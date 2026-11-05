@@ -32,7 +32,7 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
   public Collection<? extends ConnectorOperation> operations() {
     return List.of(new Load(this), new ChatContext(this),
         new CourtGuideLookup(this), new PublishChatReply(this), new ApplyOwnerAction(this),
-        new Apply(this), new Answer(this), new FinalAnswer(this), new EraseHistory(this));
+        new Apply(this), new Answer(this), new EraseHistory(this));
   }
 
   private static final class CourtGuideLookup
@@ -186,30 +186,6 @@ public class PadelConnector implements ConnectorProvider<PadelConnector.Config> 
       return CompletableFuture.completedFuture(
           new CommandOutcome.Succeeded<>(
               p.application.get().answer(i.input()), CommandConfirmation.none(), List.of()));
-    }
-  }
-
-  private static final class FinalAnswer
-      implements CommandOperation<AnsweredReview, OperationConfig, OwnerInteraction> {
-    private final PadelConnector p;
-
-    FinalAnswer(PadelConnector p) {
-      this.p = p;
-    }
-
-    public String id() {
-      return "human.final";
-    }
-
-    public Optional<ConnectorConfigSchema<OperationConfig>> configurationSchema() {
-      return Optional.of(ConnectorConfigSchema.record(OperationConfig.class, "padelpot.final", 1));
-    }
-
-    public CompletionStage<CommandOutcome<OwnerInteraction>> dispatch(
-        CommandInvocation<AnsweredReview, OperationConfig> i) {
-      OwnerInteraction r = p.application.get().answerFinal(i.input());
-      return CompletableFuture.completedFuture(
-          new CommandOutcome.Succeeded<>(r, CommandConfirmation.none(), List.of()));
     }
   }
 

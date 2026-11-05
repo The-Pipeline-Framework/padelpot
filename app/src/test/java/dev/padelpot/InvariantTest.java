@@ -60,7 +60,7 @@ class InvariantTest {
         "propose",
         List.of("alba propose hour=19 style=competitive side=left"),
         "",
-        slot == null ? "A" : slot.team());
+        slot == null ? "A" : slot.team(), 0);
   }
 
   Result result(TurnOutcome o) {
@@ -250,7 +250,7 @@ class InvariantTest {
             "",
             List.of(),
             "Find a match",
-            "");
+            "", 0);
     assertEquals(
         "EXPIRED",
         result(
@@ -432,7 +432,7 @@ class InvariantTest {
             s.lastAction(),
             s.transcript(),
             "",
-            "");
+            "", 0);
     assertEquals(
         "EXPIRED",
         result(
@@ -464,7 +464,7 @@ class InvariantTest {
             "",
             List.of(),
             "Feedback: friendly games were enjoyable",
-            "");
+            "", 0);
     var o =
         port.apply(
             new ModelTurn(
@@ -502,7 +502,7 @@ class InvariantTest {
             "",
             List.of(),
             "",
-            "");
+            "", 0);
     assertEquals("TURN_LIMIT", result(port.apply(new ModelTurn(end, malformed))).status());
   }
 
@@ -534,7 +534,7 @@ class InvariantTest {
             "propose",
             List.of(),
             "",
-            "");
+            "", 0);
     port.apply(
         new ModelTurn(
             organizer,
